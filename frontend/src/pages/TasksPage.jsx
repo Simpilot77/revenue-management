@@ -1,0 +1,958 @@
+import { useState, useEffect, useCallback } from 'react';
+import api from '../utils/api';
+import { formatCurrency } from '../utils/format';
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function addDays(dateStr, days) {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+function daysBetween(a, b) {
+  return Math.round((new Date(b) - new Date(a)) / 86400000);
+}
+function fmtDate(ds) {
+  if (!ds) return '';
+  return new Date(ds).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+}
+function fmtDateFull(ds) {
+  if (!ds) return '';
+  return new Date(ds).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+// ─── Task definitions ────────────────────────────────────────────────────────
+
+const TASK_DEFS = [
+  { key: 'welcome',       icon: '✉️',  label: 'Willkommensnachricht' },
+  { key: 'pin',           icon: '🔑',  label: 'PIN-Code übermittelt und aktiviert' },
+  { key: 'guests',        icon: '👥',  label: 'Gästeregistrierung vollständig' },
+  { key: 'invoice',       icon: '🧾',  label: 'Rechnung erstellt und verschickt' },
+  { key: 'payment',       icon: '💰',  label: 'Geldeingang mit Konto abgeglichen' },
+  { key: 'cleaning_org',  icon: '📋',  label: 'Reinigung organisiert' },
+  { key: 'cleaning_done', icon: '🧹',  label: 'Reinigung abgeschlossen' },
+];
+
+/** Calculate the automatic due date for a task */
+function getTaskDueAuto(key, booking) {
+  const ci = booking.checkin_date?.slice(0, 10);
+  const co = booking.checkout_date?.slice(0, 10);
+  const bd = booking.booking_date?.slice(0, 10);
+  if (!ci || !co) return null;
+  switch (key) {
+    case 'welcome':
+    case 'guests':
+      if (!bd || daysBetween(bd, ci) < 2) return bd || ci;
+      return addDays(ci, -2);
+    case 'pin':          return addDays(ci, -1);
+    case 'invoice':      return addDays(ci, 2);
+    case 'payment':      return ci;                // Geldeingang prüfen ab Check-in
+    case 'cleaning_org': return addDays(co, -2);
+    case 'cleaning_done': return booking.cleaning_date?.slice(0, 10) || co;
+    default: return null;
+  }
+}
+
+// ─── localStorage helpers ────────────────────────────────────────────────────
+
+const TASKS_KEY    = 'booking_tasks';
+const DUES_KEY     = 'booking_task_dues';
+
+export function loadAllTasks() {
+  try { return JSON.parse(localStorage.getItem(TASKS_KEY) || '{}'); } catch { return {}; }
+}
+export function saveAllTasks(tasks) {
+  localStorage.setItem(TASKS_KEY, JSON.stringify(tasks));
+}
+export function getBookingTasks(bookingId) {
+  return loadAllTasks()[bookingId] || {};
+}
+
+function loadAllDues() {
+  try { return JSON.parse(localStorage.getItem(DUES_KEY) || '{}'); } catch { return {}; }
+}
+function saveAllDues(dues) {
+  localStorage.setItem(DUES_KEY, JSON.stringify(dues));
+}
+function getTaskDueOverride(bookingId, key) {
+  return loadAllDues()[bookingId]?.[key] || null;
+}
+function setTaskDueOverride(bookingId, key, date) {
+  const all = loadAllDues();
+  if (!all[bookingId]) all[bookingId] = {};
+  if (date) all[bookingId][key] = date;
+  else delete all[bookingId][key];
+  saveAllDues(all);
+}
+function getEffectiveDue(key, booking) {
+  return getTaskDueOverride(booking.id, key) || getTaskDueAuto(key, booking);
+}
+
+function allTasksDone(taskState) {
+  return TASK_DEFS.every(t => taskState[t.key]);
+}
+
+/** Visual urgency for a due date */
+function dueStatus(dueDate, isDone) {
+  if (isDone) return { label: null, cls: '' };
+  if (!dueDate) return { label: null, cls: '' };
+  const today = new Date().toISOString().slice(0, 10);
+  const diff = daysBetween(today, dueDate);
+  if (diff < 0)  return { label: `Überfällig (${fmtDate(dueDate)})`, cls: 'text-red-600 font-semibold' };
+  if (diff === 0) return { label: 'Heute fällig',                     cls: 'text-red-500 font-semibold' };
+  if (diff === 1) return { label: `Morgen (${fmtDate(dueDate)})`,      cls: 'text-amber-600 font-medium' };
+  return          { label: `Fällig ${fmtDate(dueDate)}`,              cls: 'text-gray-400' };
+}
+
+// ─── House Status Card ────────────────────────────────────────────────────────
+
+function HouseStatusCard({ house, bookings }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const activeStatuses = ['bestaetigt', 'eingecheckt', 'ausgecheckt'];
+
+  const currentBooking = bookings.find(b =>
+    b.house_id === house.id &&
+    activeStatuses.includes(b.status) &&
+    b.checkin_date?.slice(0, 10) <= today &&
+    b.checkout_date?.slice(0, 10) >= today
+  );
+
+  // Upcoming inquiry (angefragt) overlapping today or in future
+  const inquiryToday = !currentBooking && bookings.find(b =>
+    b.house_id === house.id &&
+    b.status === 'angefragt' &&
+    b.checkin_date?.slice(0, 10) <= today &&
+    b.checkout_date?.slice(0, 10) >= today
+  );
+
+  const nextBooking = bookings
+    .filter(b =>
+      b.house_id === house.id &&
+      ['bestaetigt', 'eingecheckt'].includes(b.status) &&
+      b.checkin_date?.slice(0, 10) > today
+    )
+    .sort((a, b) => a.checkin_date.localeCompare(b.checkin_date))[0];
+
+  const lastOut = bookings
+    .filter(b =>
+      b.house_id === house.id &&
+      b.checkout_date?.slice(0, 10) < today &&
+      activeStatuses.includes(b.status)
+    )
+    .sort((a, b) => b.checkout_date.localeCompare(a.checkout_date))[0];
+
+  const lastOutTasks  = lastOut ? getBookingTasks(lastOut.id) : null;
+  const cleaningDone  = lastOut ? !!(lastOutTasks?.cleaning_done) : true;
+  const cleaningOrg   = lastOut ? !!(lastOutTasks?.cleaning_org) : false;
+  const occupied    = !!currentBooking;
+  const isInquiry   = !!inquiryToday;
+
+  const daysUntilFree = currentBooking
+    ? Math.max(0, Math.ceil((new Date(currentBooking.checkout_date) - new Date(today)) / 86400000))
+    : 0;
+  const daysUntilNext = nextBooking
+    ? Math.max(0, Math.ceil((new Date(nextBooking.checkin_date) - new Date(today)) / 86400000))
+    : null;
+
+  // ── Progress bar calculation ──
+  let progressPct = 0;
+  let progressLabel = '';
+  if (occupied && currentBooking) {
+    const start = new Date(currentBooking.checkin_date);
+    const end   = new Date(currentBooking.checkout_date);
+    const now   = new Date(today);
+    const total = Math.max(1, (end - start) / 86400000);
+    const elapsed = Math.max(0, (now - start) / 86400000);
+    progressPct = Math.min(100, Math.round((elapsed / total) * 100));
+    progressLabel = `${progressPct}% Aufenthalt`;
+  } else if (!occupied && nextBooking && lastOut) {
+    const lastEnd  = new Date(lastOut.checkout_date);
+    const nextStart = new Date(nextBooking.checkin_date);
+    const now      = new Date(today);
+    const total    = Math.max(1, (nextStart - lastEnd) / 86400000);
+    const elapsed  = Math.max(0, (now - lastEnd) / 86400000);
+    progressPct = Math.min(100, Math.round((elapsed / total) * 100));
+    progressLabel = `Pause ${progressPct}%`;
+  } else if (!occupied && nextBooking) {
+    progressPct = 0;
+    progressLabel = `in ${daysUntilNext} Tag${daysUntilNext !== 1 ? 'en' : ''}`;
+  }
+
+  // ── Visual status ──
+  let statusLabel, statusIcon, buttonClass;
+  if (occupied) {
+    statusLabel   = 'Belegt';
+    statusIcon    = '🏠';
+    buttonClass   = 'bg-red-500 border-white/30 text-white';
+  } else if (isInquiry) {
+    statusLabel   = 'Angefragt';
+    statusIcon    = '❓';
+    buttonClass   = 'bg-violet-500 border-white/30 text-white';
+  } else if (!cleaningDone && lastOut) {
+    statusLabel   = 'Reinigung ausstehend';
+    statusIcon    = '🧹';
+    buttonClass   = 'bg-amber-400 border-white/30 text-white';
+  } else {
+    statusLabel   = 'Fertig für Vermietung';
+    statusIcon    = '✅';
+    buttonClass   = 'bg-emerald-500 border-white/30 text-white';
+  }
+
+  const activeBooking = currentBooking || inquiryToday;
+
+  return (
+    <div className="rounded-2xl overflow-hidden shadow-md ring-1 ring-gray-200">
+      {/* Gradient header – always blue */}
+      <div className="bg-gradient-to-br from-blue-700 to-blue-900 p-5 text-white relative">
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="text-xl font-bold tracking-tight">{house.name}</div>
+            <div className="text-sm opacity-75 mt-0.5">{house.capacity} Betten</div>
+          </div>
+          <div className="text-4xl drop-shadow-sm">{statusIcon}</div>
+        </div>
+
+        {/* Colored status button */}
+        <div className={`mt-3 inline-flex items-center gap-1.5 ${buttonClass} bg-opacity-80 border rounded-full px-4 py-1.5 text-sm font-bold shadow-sm`}>
+          {statusLabel}
+        </div>
+
+        {/* Dates overlay */}
+        {activeBooking && (
+          <div className="absolute bottom-3 right-4 text-xs opacity-80 text-right">
+            <div>📅 {fmtDateFull(activeBooking.checkin_date)}</div>
+            <div>🏁 {fmtDateFull(activeBooking.checkout_date)}</div>
+          </div>
+        )}
+      </div>
+
+      {/* Progress bar with percentage */}
+      <div className="relative">
+        <div className="h-2 bg-gray-200 w-full">
+          <div
+            className={`h-full transition-all duration-500
+              ${occupied ? 'bg-red-400' : isInquiry ? 'bg-violet-400' : !cleaningDone ? 'bg-amber-400' : 'bg-emerald-400'}`}
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
+        {progressPct > 0 && (
+          <span className="absolute right-2 top-[-1px] text-[10px] font-semibold text-gray-400 leading-none" style={{lineHeight:'8px'}}>
+            {progressPct}%
+          </span>
+        )}
+      </div>
+
+      {/* Body */}
+      <div className="bg-white p-4 space-y-3">
+        {occupied && currentBooking ? (
+          <>
+            <Row label="Gast">
+              <span className="text-sm font-semibold text-gray-800 truncate">{currentBooking.guest_name}</span>
+            </Row>
+            <Row label="Abreise">
+              <span className="text-sm font-medium text-red-700">{fmtDateFull(currentBooking.checkout_date)}</span>
+              <span className={`text-xs rounded-full px-2 py-0.5 ml-1 ${daysUntilFree === 0 ? 'bg-amber-100 text-amber-700' : 'bg-red-50 text-red-500'}`}>
+                {daysUntilFree === 0 ? 'Heute' : daysUntilFree === 1 ? 'Morgen' : `in ${daysUntilFree} Tagen`}
+              </span>
+            </Row>
+            <Row label="Reinigung">
+              {cleaningDone
+                ? <span className="text-xs font-medium rounded-full px-2 py-0.5 bg-emerald-100 text-emerald-700">✅ Bestätigt</span>
+                : cleaningOrg
+                  ? <span className="text-xs font-medium rounded-full px-2 py-0.5 bg-yellow-100 text-yellow-700">🗓 Organisiert</span>
+                  : <span className="text-xs font-medium rounded-full px-2 py-0.5 bg-red-100 text-red-600">⚠ Noch organisieren</span>
+              }
+            </Row>
+          </>
+        ) : (
+          <>
+            <Row label="Status">
+              <span className={`text-sm font-semibold ${cleaningDone ? 'text-emerald-600' : 'text-amber-600'}`}>
+                {cleaningDone ? '🏡 Haus frei für Vermietung' : 'Reinigung erforderlich'}
+              </span>
+            </Row>
+            <Row label="Reinigung">
+              <span className="text-xs font-medium rounded-full px-2 py-0.5 bg-emerald-100 text-emerald-700">✅ Reinigung erledigt</span>
+            </Row>
+          </>
+        )}
+
+        <div className="border-t border-gray-100 pt-3">
+          {nextBooking ? (
+            <Row label="Nächste">
+              <div className="min-w-0">
+                <span className="text-sm font-medium text-gray-800 truncate block">{nextBooking.guest_name}</span>
+                <span className="text-xs text-gray-500">
+                  {fmtDateFull(nextBooking.checkin_date)}
+                  {daysUntilNext === 0 ? ' (Heute)' : daysUntilNext === 1 ? ' (Morgen)' : ` (in ${daysUntilNext} Tagen)`}
+                </span>
+              </div>
+            </Row>
+          ) : (
+            <div className="text-xs text-gray-400 italic">Keine weiteren Buchungen geplant</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Row({ label, children }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-gray-400 w-16 shrink-0">{label}</span>
+      {children}
+    </div>
+  );
+}
+
+// ─── Due Date Editor (inline) ────────────────────────────────────────────────
+
+function DueDateCell({ bookingId, taskKey, booking, isDone, onChanged }) {
+  const [editing, setEditing] = useState(false);
+  const auto    = getTaskDueAuto(taskKey, booking);
+  const override = getTaskDueOverride(bookingId, taskKey);
+  const effective = override || auto;
+  const { label: dueLabel, cls: dueCls } = dueStatus(effective, isDone);
+
+  const handleSave = (val) => {
+    setTaskDueOverride(bookingId, taskKey, val || null);
+    setEditing(false);
+    onChanged?.();
+  };
+
+  if (editing) {
+    return (
+      <span className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+        <input
+          type="date"
+          defaultValue={effective || ''}
+          className="text-xs border border-blue-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+          onBlur={e => handleSave(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') handleSave(e.target.value); if (e.key === 'Escape') setEditing(false); }}
+          autoFocus
+        />
+        {override && (
+          <button
+            className="text-xs text-gray-400 hover:text-red-500 px-1"
+            onClick={() => handleSave(null)}
+            title="Zurücksetzen auf automatisch"
+          >↺</button>
+        )}
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex items-center gap-1 group">
+      {dueLabel ? (
+        <span className={`text-xs ${dueCls}`}>{dueLabel}{override ? ' ✎' : ''}</span>
+      ) : isDone ? null : (
+        <span className="text-xs text-gray-300">Kein Datum</span>
+      )}
+      {!isDone && (
+        <button
+          className="text-gray-300 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity text-xs"
+          onClick={e => { e.stopPropagation(); setEditing(true); }}
+          title="Fälligkeitsdatum bearbeiten"
+        >✏️</button>
+      )}
+    </span>
+  );
+}
+
+// ─── Single Booking Task Card ─────────────────────────────────────────────────
+
+function BookingTaskCard({ booking, onTaskChange }) {
+  const [tasks, setTasks] = useState(() => getBookingTasks(booking.id));
+  const [expanded, setExpanded] = useState(false);
+  const [, rerender] = useState(0);
+
+  const done      = allTasksDone(tasks);
+  const doneCount = TASK_DEFS.filter(t => tasks[t.key]).length;
+  const pct       = Math.round((doneCount / TASK_DEFS.length) * 100);
+
+  const today    = new Date().toISOString().slice(0, 10);
+  const isActive = booking.checkin_date?.slice(0, 10) <= today && booking.checkout_date?.slice(0, 10) >= today;
+  const isFuture = booking.checkin_date?.slice(0, 10) > today;
+
+  const overdueCount = TASK_DEFS.filter(t => {
+    if (tasks[t.key]) return false;
+    const due = getEffectiveDue(t.key, booking);
+    return due && due < today;
+  }).length;
+
+  const statusLabel = isActive ? 'Aktuell' : isFuture ? 'Bevorstehend' : 'Abgereist';
+  const statusColor = isActive
+    ? 'bg-blue-100 text-blue-700'
+    : isFuture ? 'bg-amber-100 text-amber-700'
+    : 'bg-gray-100 text-gray-500';
+
+  const borderColor = done
+    ? 'border-l-4 border-l-emerald-500'
+    : overdueCount > 0 ? 'border-l-4 border-l-red-500'
+    : isActive ? 'border-l-4 border-l-blue-500'
+    : isFuture ? 'border-l-4 border-l-amber-400'
+    : '';
+
+  const toggle = (e, key) => {
+    e.stopPropagation();
+    const all = loadAllTasks();
+    const current = all[booking.id] || {};
+    const updated = { ...current, [key]: !current[key] };
+    all[booking.id] = updated;
+    saveAllTasks(all);
+    setTasks(updated);
+    onTaskChange?.(booking, key, updated[key], updated);
+  };
+
+  return (
+    <div className={`card transition-all ${borderColor}`}>
+      {/* Header row */}
+      <div
+        className="flex items-center gap-4 cursor-pointer select-none"
+        onClick={() => setExpanded(e => !e)}
+      >
+        {/* SVG progress circle */}
+        <div className="relative w-11 h-11 shrink-0">
+          <svg viewBox="0 0 36 36" className="w-11 h-11 -rotate-90">
+            <circle cx="18" cy="18" r="15.9" fill="none" stroke="#e5e7eb" strokeWidth="3" />
+            <circle
+              cx="18" cy="18" r="15.9" fill="none"
+              stroke={done ? '#10b981' : overdueCount > 0 ? '#ef4444' : isActive ? '#3b82f6' : '#f59e0b'}
+              strokeWidth="3"
+              strokeDasharray={`${pct} ${100 - pct}`}
+              strokeLinecap="round"
+            />
+          </svg>
+          <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-gray-600">
+            {doneCount}/{TASK_DEFS.length}
+          </span>
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-gray-900 truncate">{booking.guest_name}</span>
+            {booking.company_name && (
+              <span className="text-xs text-gray-400 truncate">{booking.company_name}</span>
+            )}
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${statusColor}`}>
+              {statusLabel}
+            </span>
+            {overdueCount > 0 && !done && (
+              <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-700 shrink-0">
+                ⚠ {overdueCount} überfällig
+              </span>
+            )}
+            {done && (
+              <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-700 shrink-0">
+                ✅ Erledigt
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-500 flex-wrap">
+            <span className="inline-flex items-center gap-1 font-medium text-gray-600 bg-gray-100 rounded-md px-1.5 py-0.5">
+              🏠 {booking.house_name || booking.house_short || `Haus ${booking.house_id}`}
+            </span>
+            <span className="text-gray-400">
+              {new Date(booking.checkin_date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
+              {' – '}
+              {new Date(booking.checkout_date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+            </span>
+            <span className="inline-flex items-center gap-1 text-gray-500">
+              🌙 {booking.nights} {booking.nights === 1 ? 'Nacht' : 'Nächte'}
+            </span>
+            <span className="inline-flex items-center gap-1 text-gray-500">
+              👤 {booking.guest_count} {booking.guest_count === 1 ? 'Gast' : 'Gäste'}
+            </span>
+            {booking.channel_name && (
+              <span className="inline-flex items-center gap-1 text-gray-400 text-xs">
+                🌐 {booking.channel_name}
+              </span>
+            )}
+            {booking.total_price > 0 && (
+              <span className="inline-flex items-center gap-1 text-gray-400 text-xs">
+                💶 {formatCurrency(booking.total_price)}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Progress bar + expand arrow */}
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="hidden sm:block w-28">
+            <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-300
+                  ${done ? 'bg-emerald-500' : overdueCount > 0 ? 'bg-red-500' : isActive ? 'bg-blue-500' : 'bg-amber-400'}`}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <div className="text-xs text-gray-400 mt-1 text-right">{pct}%</div>
+          </div>
+          <span className="text-gray-400 text-xs font-medium">{expanded ? '▲' : '▼'}</span>
+        </div>
+      </div>
+
+      {/* Expanded task list */}
+      {expanded && (
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {TASK_DEFS.map(task => {
+              const isDone    = !!tasks[task.key];
+              const dueDate   = getEffectiveDue(task.key, booking);
+              const isOverdue = !isDone && dueDate && dueDate < today;
+
+              return (
+                <div
+                  key={task.key}
+                  className={`flex items-start gap-3 p-2.5 rounded-xl
+                    ${isDone ? 'bg-emerald-50' : isOverdue ? 'bg-red-50' : 'bg-gray-50'}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isDone}
+                    onChange={e => toggle(e, task.key)}
+                    className="w-4 h-4 accent-emerald-600 cursor-pointer shrink-0 mt-0.5"
+                  />
+                  <span className="text-base shrink-0 mt-0.5">{task.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <span className={`text-sm block ${isDone ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+                      {task.label}
+                    </span>
+                    <DueDateCell
+                      bookingId={booking.id}
+                      taskKey={task.key}
+                      booking={booking}
+                      isDone={isDone}
+                      onChanged={() => rerender(n => n + 1)}
+                    />
+                  </div>
+                  {isDone && <span className="text-xs text-emerald-500 font-bold shrink-0 mt-0.5">✓</span>}
+                  {isOverdue && <span className="text-xs text-red-500 font-bold shrink-0 mt-0.5">!</span>}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-3 flex gap-4 text-xs text-gray-400 flex-wrap">
+            <span className="text-red-600 font-semibold">● Überfällig</span>
+            <span className="text-amber-600 font-medium">● Bald fällig</span>
+            <span className="text-gray-400">● Geplant</span>
+            <span className="text-gray-300 italic">✏️ = Datum manuell anpassen</span>
+          </div>
+
+          {done && (
+            <div className="mt-3 flex items-center gap-2 p-3 bg-emerald-50 rounded-xl border border-emerald-200">
+              <span className="text-emerald-600 text-lg">🎉</span>
+              <span className="text-sm font-semibold text-emerald-700">
+                Alle Aufgaben erledigt – Buchung vollständig abgeschlossen!
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── "Zu Erledigen" Panel ─────────────────────────────────────────────────────
+
+function ZuErledigenpanel({ bookings }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [, rerender] = useState(0);
+
+  // Build flat list of all pending tasks with their due dates
+  const pendingItems = [];
+  bookings.forEach(booking => {
+    const tasks = getBookingTasks(booking.id);
+    const isActive = booking.checkin_date?.slice(0, 10) <= today && booking.checkout_date?.slice(0, 10) >= today;
+    const isFuture = booking.checkin_date?.slice(0, 10) > today;
+    const context = isActive ? 'Aktuell' : isFuture ? 'Bevorstehend' : 'Abgereist';
+
+    TASK_DEFS.forEach(td => {
+      if (tasks[td.key]) return; // already done
+      const due = getEffectiveDue(td.key, booking);
+      pendingItems.push({
+        bookingId: booking.id,
+        booking,
+        taskKey: td.key,
+        taskIcon: td.icon,
+        taskLabel: td.label,
+        dueDate: due,
+        isOverdue: due && due < today,
+        context,
+      });
+    });
+  });
+
+  // Sort chronologically by due date (null dates at end)
+  pendingItems.sort((a, b) => {
+    if (!a.dueDate && !b.dueDate) return 0;
+    if (!a.dueDate) return 1;
+    if (!b.dueDate) return -1;
+    return a.dueDate.localeCompare(b.dueDate);
+  });
+
+  // Group by booking
+  const grouped = [];
+  const seen = new Set();
+  pendingItems.forEach(item => {
+    if (!seen.has(item.bookingId)) {
+      seen.add(item.bookingId);
+      grouped.push({ booking: item.booking, items: [] });
+    }
+    grouped[grouped.length - 1].items.push(item);
+  });
+  // Actually re-group: group by booking_id across the sorted list
+  const byBooking = {};
+  pendingItems.forEach(item => {
+    if (!byBooking[item.bookingId]) byBooking[item.bookingId] = { booking: item.booking, items: [] };
+    byBooking[item.bookingId].items.push(item);
+  });
+
+  if (pendingItems.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <div className="text-4xl mb-3">🎉</div>
+        <div className="text-lg font-semibold text-emerald-700">Alles erledigt!</div>
+        <div className="text-sm text-gray-400 mt-1">Keine offenen Aufgaben in diesem Zeitraum.</div>
+      </div>
+    );
+  }
+
+  // For each item, allow toggling
+  const toggle = (booking, key) => {
+    const all = loadAllTasks();
+    const current = all[booking.id] || {};
+    const updated = { ...current, [key]: !current[key] };
+    all[booking.id] = updated;
+    saveAllTasks(all);
+    // Sync cleaning_done → calendar markers
+    if (key === 'cleaning_done' && booking.house_id) {
+      const cleanDate = booking.cleaning_date?.slice(0, 10) || booking.checkout_date?.slice(0, 10);
+      if (cleanDate) {
+        try {
+          const markers = JSON.parse(localStorage.getItem('cleaning_markers') || '{}');
+          const mk = `${booking.house_id}_${cleanDate}`;
+          if (updated[key]) markers[mk] = true; else delete markers[mk];
+          localStorage.setItem('cleaning_markers', JSON.stringify(markers));
+        } catch (_) {}
+      }
+    }
+    rerender(n => n + 1);
+  };
+
+  const overdueCount  = pendingItems.filter(i => i.isOverdue).length;
+  const todayCount    = pendingItems.filter(i => i.dueDate === today).length;
+  const upcomingCount = pendingItems.filter(i => i.dueDate && i.dueDate > today).length;
+
+  return (
+    <div className="space-y-4">
+      {/* Summary row */}
+      <div className="flex gap-3 flex-wrap">
+        {overdueCount > 0 && (
+          <div className="flex items-center gap-1.5 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5 text-sm">
+            <span className="font-bold text-red-600">⚠ {overdueCount}</span>
+            <span className="text-red-500">überfällig</span>
+          </div>
+        )}
+        {todayCount > 0 && (
+          <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 text-sm">
+            <span className="font-bold text-amber-600">{todayCount}</span>
+            <span className="text-amber-500">heute fällig</span>
+          </div>
+        )}
+        <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-100 rounded-lg px-3 py-1.5 text-sm">
+          <span className="font-bold text-blue-600">{pendingItems.length}</span>
+          <span className="text-blue-500">Aufgaben gesamt offen</span>
+        </div>
+      </div>
+
+      {/* Chronological list, grouped by booking */}
+      {Object.values(byBooking).map(({ booking, items }) => {
+        const isActive = booking.checkin_date?.slice(0, 10) <= today && booking.checkout_date?.slice(0, 10) >= today;
+        const isFuture = booking.checkin_date?.slice(0, 10) > today;
+        const statusCls = isActive ? 'bg-blue-100 text-blue-700' : isFuture ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500';
+        const statusTxt = isActive ? 'Aktuell' : isFuture ? 'Bevorstehend' : 'Abgereist';
+
+        return (
+          <div key={booking.id} className="card">
+            {/* Booking header */}
+            <div className="flex items-center gap-3 mb-3 pb-3 border-b border-gray-100 flex-wrap">
+              <div>
+                <span className="font-semibold text-gray-800">{booking.guest_name}</span>
+                {booking.company_name && <span className="text-xs text-gray-400 ml-2">{booking.company_name}</span>}
+              </div>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusCls}`}>{statusTxt}</span>
+              <span className="text-xs text-gray-500 ml-auto">
+                {booking.house_short || booking.house_id} ·{' '}
+                {fmtDate(booking.checkin_date)} – {fmtDate(booking.checkout_date)}
+              </span>
+            </div>
+
+            {/* Task items sorted by due date */}
+            <div className="space-y-2">
+              {items.sort((a, b) => {
+                if (!a.dueDate && !b.dueDate) return 0;
+                if (!a.dueDate) return 1;
+                if (!b.dueDate) return -1;
+                return a.dueDate.localeCompare(b.dueDate);
+              }).map(item => {
+                const { label: dueLabel, cls: dueCls } = dueStatus(item.dueDate, false);
+                return (
+                  <div
+                    key={item.taskKey}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl
+                      ${item.isOverdue ? 'bg-red-50 border border-red-100' : item.dueDate === today ? 'bg-amber-50 border border-amber-100' : 'bg-gray-50'}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={false}
+                      onChange={() => toggle(booking, item.taskKey)}
+                      className="w-4 h-4 accent-emerald-600 cursor-pointer shrink-0"
+                    />
+                    <span className="text-base">{item.taskIcon}</span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm text-gray-800">{item.taskLabel}</span>
+                    </div>
+                    <div className="text-right shrink-0">
+                      {dueLabel && <div className={`text-xs ${dueCls}`}>{dueLabel}</div>}
+                    </div>
+                    <DueDateCell
+                      bookingId={booking.id}
+                      taskKey={item.taskKey}
+                      booking={booking}
+                      isDone={false}
+                      onChanged={() => rerender(n => n + 1)}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
+export default function TasksPage() {
+  const [houses, setHouses]     = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [filter, setFilter]     = useState('current');
+  const [tab, setTab]           = useState('tasks'); // 'tasks' | 'todo'
+  const [, rerender]            = useState(0);
+
+  const today  = new Date().toISOString().slice(0, 10);
+  const past30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const next60 = new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10);
+
+  useEffect(() => {
+    Promise.all([
+      api.get('/meta/houses'),
+      api.get('/bookings', { params: { limit: 500, from: past30, to: next60 } }),
+    ]).then(([hRes, bRes]) => {
+      setHouses(hRes.data || []);
+      const all = (bRes.data?.data || []).filter(b =>
+        ['bestaetigt', 'eingecheckt', 'ausgecheckt'].includes(b.status)
+      );
+      setBookings(all);
+    }).finally(() => setLoading(false));
+  }, []);
+
+  const handleTaskChange = useCallback((booking, key, value) => {
+    if (key === 'cleaning_done' && booking.house_id) {
+      const cleanDate = booking.cleaning_date?.slice(0, 10) || booking.checkout_date?.slice(0, 10);
+      if (cleanDate) {
+        try {
+          const markers = JSON.parse(localStorage.getItem('cleaning_markers') || '{}');
+          const mk = `${booking.house_id}_${cleanDate}`;
+          if (value) markers[mk] = true; else delete markers[mk];
+          localStorage.setItem('cleaning_markers', JSON.stringify(markers));
+        } catch (_) {}
+      }
+    }
+    rerender(n => n + 1);
+  }, []);
+
+  const FILTERS = [
+    { key: 'current',    label: 'Aktuell',        fn: b => b.checkin_date?.slice(0,10) <= today && b.checkout_date?.slice(0,10) >= today },
+    { key: 'upcoming',   label: 'Bevorstehend',    fn: b => b.checkin_date?.slice(0,10) > today },
+    { key: 'recent',     label: 'Abgereist',       fn: b => b.checkout_date?.slice(0,10) < today },
+    { key: 'overdue',    label: 'Überfällig',      fn: b => {
+      const t = getBookingTasks(b.id);
+      return TASK_DEFS.some(td => {
+        if (t[td.key]) return false;
+        const due = getEffectiveDue(td.key, b);
+        return due && due < today;
+      });
+    }},
+    { key: 'incomplete', label: 'Offen',           fn: b => !allTasksDone(getBookingTasks(b.id)) },
+    { key: 'all',        label: 'Alle (±60 Tage)', fn: () => true },
+  ];
+
+  const activeFilter = FILTERS.find(f => f.key === filter);
+  const filteredBookings = bookings
+    .filter(activeFilter?.fn || (() => true))
+    .sort((a, b) => {
+      const aA = a.checkin_date?.slice(0,10) <= today && a.checkout_date?.slice(0,10) >= today;
+      const bA = b.checkin_date?.slice(0,10) <= today && b.checkout_date?.slice(0,10) >= today;
+      if (aA !== bA) return aA ? -1 : 1;
+      return a.checkin_date?.localeCompare(b.checkin_date) || 0;
+    });
+
+  const totalTasks  = bookings.length * TASK_DEFS.length;
+  const doneTasks   = bookings.reduce((s, b) => {
+    const t = getBookingTasks(b.id);
+    return s + TASK_DEFS.filter(td => t[td.key]).length;
+  }, 0);
+  const completedBookings = bookings.filter(b => allTasksDone(getBookingTasks(b.id))).length;
+  const overdueTotal = bookings.reduce((s, b) => {
+    const t = getBookingTasks(b.id);
+    return s + TASK_DEFS.filter(td => {
+      if (t[td.key]) return false;
+      const due = getEffectiveDue(td.key, b);
+      return due && due < today;
+    }).length;
+  }, 0);
+  const pendingTotal = bookings.reduce((s, b) => {
+    const t = getBookingTasks(b.id);
+    return s + TASK_DEFS.filter(td => !t[td.key]).length;
+  }, 0);
+
+  return (
+    <div className="p-6 space-y-6">
+      {/* Page header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h1 className="text-2xl font-bold text-gray-900">Aufgaben</h1>
+        <div className="flex gap-3 flex-wrap">
+          {overdueTotal > 0 && (
+            <div className="flex items-center gap-1.5 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5">
+              <span className="text-red-600 font-bold">⚠ {overdueTotal}</span>
+              <span className="text-red-500 text-sm">überfällig</span>
+            </div>
+          )}
+          <div className="flex items-center gap-1.5 bg-blue-50 rounded-lg px-3 py-1.5">
+            <span className="text-blue-600 font-bold">{doneTasks}</span>
+            <span className="text-blue-500 text-sm">/ {totalTasks} Aufgaben</span>
+          </div>
+          <div className="flex items-center gap-1.5 bg-emerald-50 rounded-lg px-3 py-1.5">
+            <span className="text-emerald-600 font-bold">{completedBookings}</span>
+            <span className="text-emerald-500 text-sm">Buchungen erledigt</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── House Status ── */}
+      <section>
+        <h2 className="text-base font-semibold text-gray-700 mb-3 flex items-center gap-2">
+          <span>🏠</span> Hausstatus
+        </h2>
+        {loading ? (
+          <div className="text-center text-gray-400 py-8">Wird geladen…</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {houses.map(house => (
+              <HouseStatusCard key={house.id} house={house} bookings={bookings} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ── Tab navigation ── */}
+      <div className="flex gap-1 border-b border-gray-200">
+        <button
+          onClick={() => setTab('tasks')}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors
+            ${tab === 'tasks' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+        >
+          ☑️ Aufgaben je Buchung
+        </button>
+        <button
+          onClick={() => setTab('todo')}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5
+            ${tab === 'todo' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+        >
+          📋 Zu Erledigen
+          {pendingTotal > 0 && (
+            <span className={`text-xs rounded-full px-1.5 font-bold ${tab === 'todo' ? 'bg-blue-600 text-white' : overdueTotal > 0 ? 'bg-red-500 text-white' : 'bg-gray-300 text-gray-700'}`}>
+              {pendingTotal}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* ── Tab content ── */}
+      {tab === 'tasks' && (
+        <section>
+          <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+            <div className="flex gap-1.5 flex-wrap">
+              {FILTERS.map(({ key, label }) => {
+                const count = key === 'overdue'
+                  ? overdueTotal
+                  : key === 'incomplete'
+                  ? bookings.filter(b => !allTasksDone(getBookingTasks(b.id))).length
+                  : null;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setFilter(key)}
+                    className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors
+                      ${filter === key
+                        ? key === 'overdue' ? 'bg-red-600 text-white shadow-sm' : 'bg-blue-700 text-white shadow-sm'
+                        : key === 'overdue' && overdueTotal > 0 ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                  >
+                    {label}
+                    {count !== null && count > 0 && (
+                      <span className={`ml-1.5 rounded-full px-1.5 text-xs font-bold
+                        ${filter === key ? 'bg-white text-gray-700'
+                          : key === 'overdue' ? 'bg-red-500 text-white'
+                          : 'bg-amber-400 text-white'}`}>
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="text-center text-gray-400 py-12">Wird geladen…</div>
+          ) : filteredBookings.length === 0 ? (
+            <div className="text-center text-gray-400 py-12">
+              <div className="text-3xl mb-2">🎉</div>
+              <div className="font-medium">Keine Einträge in diesem Bereich</div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredBookings.map(b => (
+                <BookingTaskCard
+                  key={b.id}
+                  booking={b}
+                  onTaskChange={handleTaskChange}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {tab === 'todo' && (
+        <section>
+          {loading ? (
+            <div className="text-center text-gray-400 py-12">Wird geladen…</div>
+          ) : (
+            <ZuErledigenpanel bookings={bookings} />
+          )}
+        </section>
+      )}
+    </div>
+  );
+}
