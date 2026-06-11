@@ -227,12 +227,29 @@ export default function SettingsPage() {
       </Section>
 
       {/* 7. Datenbank Export / Import */}
-      <Section title="💾 Datenbank – Export & Import">
+      <Section title="💾 Vollständige Datensicherung – Export & Import">
         <div className="space-y-4">
           <p className="text-sm text-slate-600">
-            Exportieren Sie alle Buchungen, Kunden und Einstellungen als JSON-Datei zur lokalen Sicherung.
-            Der Import ersetzt alle aktuellen Daten – bitte erst exportieren, dann importieren.
+            Exportiert den <strong>kompletten App-Stand</strong> als JSON-Datei: Buchungen, Kunden, Aufgaben-Status,
+            Fälligkeitsdaten, Reinigungsmarkierungen, Statistik-Ausschlüsse und alle Unternehmenseinstellungen.
+            Beim Import wird alles vollständig wiederhergestellt.
           </p>
+
+          {/* Was ist enthalten */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {[
+              ['📋', 'Buchungen'],
+              ['👥', 'Kunden'],
+              ['✅', 'Aufgaben-Status'],
+              ['📅', 'Fälligkeitsdaten'],
+              ['🧹', 'Reinigungsmarkierungen'],
+              ['🏢', 'Unternehmenseinstellungen'],
+            ].map(([icon, label]) => (
+              <div key={label} className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 rounded-lg px-3 py-2">
+                <span>{icon}</span><span>{label}</span>
+              </div>
+            ))}
+          </div>
 
           <div className="flex flex-wrap gap-3 items-center">
             {/* Export */}
@@ -244,14 +261,14 @@ export default function SettingsPage() {
                 const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
-                const ts = new Date().toISOString().slice(0, 10);
+                const ts = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '-');
                 a.href = url;
                 a.download = `workation-backup-${ts}.json`;
                 a.click();
                 URL.revokeObjectURL(url);
               }}
             >
-              ⬇ Datenbank exportieren
+              ⬇ Vollständig exportieren
             </button>
 
             {/* Import */}
@@ -260,7 +277,7 @@ export default function SettingsPage() {
               className="btn-secondary flex items-center gap-2"
               onClick={() => importRef.current?.click()}
             >
-              ⬆ Datenbank importieren
+              ⬆ Backup importieren
             </button>
             <input
               ref={importRef}
@@ -274,11 +291,29 @@ export default function SettingsPage() {
                 reader.onload = (ev) => {
                   try {
                     const data = JSON.parse(ev.target.result);
-                    if (!confirm(`Import bestätigen?\n\nDies ersetzt alle aktuellen Daten mit dem Backup vom ${data.exported_at ? new Date(data.exported_at).toLocaleString('de-DE') : 'unbekanntem Datum'}.\n\nBuchungen: ${data.bookings?.length ?? 0}\nKunden: ${data.customers?.length ?? 0}\n\nFortfahren?`)) {
-                      return;
-                    }
+                    const exportedAt = data.exported_at
+                      ? new Date(data.exported_at).toLocaleString('de-DE')
+                      : 'unbekanntem Datum';
+                    const hasTasks    = data.booking_tasks    ? '✅' : '—';
+                    const hasDues     = data.booking_task_dues ? '✅' : '—';
+                    const hasSettings = data.company_settings  ? '✅' : '—';
+                    const hasCleaning = data.cleaning_markers  ? '✅' : '—';
+                    if (!confirm(
+                      `Import bestätigen?\n\n` +
+                      `Backup vom: ${exportedAt}\n\n` +
+                      `📋 Buchungen:              ${data.bookings?.length ?? 0}\n` +
+                      `👥 Kunden:                 ${data.customers?.length ?? 0}\n` +
+                      `✅ Aufgaben-Status:        ${hasTasks}\n` +
+                      `📅 Fälligkeitsdaten:       ${hasDues}\n` +
+                      `🧹 Reinigungsmarkierungen: ${hasCleaning}\n` +
+                      `🏢 Unternehmenseinst.:     ${hasSettings}\n\n` +
+                      `Dies ersetzt ALLE aktuellen Daten. Fortfahren?`
+                    )) return;
                     importDatabase(data);
-                    setImportStatus({ type: 'success', msg: `Import erfolgreich: ${data.bookings?.length ?? 0} Buchungen, ${data.customers?.length ?? 0} Kunden geladen. Seite wird neu geladen…` });
+                    setImportStatus({
+                      type: 'success',
+                      msg: `Import erfolgreich: ${data.bookings?.length ?? 0} Buchungen, ${data.customers?.length ?? 0} Kunden und alle Einstellungen wiederhergestellt. Seite wird neu geladen…`
+                    });
                     setTimeout(() => window.location.reload(), 2000);
                   } catch (err) {
                     setImportStatus({ type: 'error', msg: `Import fehlgeschlagen: ${err.message}` });
@@ -296,9 +331,10 @@ export default function SettingsPage() {
             </div>
           )}
 
-          <div className="text-xs text-slate-400 space-y-1">
-            <div>• Die Export-Datei enthält alle Buchungen, Kunden, Statistik-Ausschlüsse und Reinigungsmarkierungen.</div>
-            <div>• Beim Import werden diese Daten vollständig überschrieben – Unternehmenseinstellungen bleiben erhalten.</div>
+          <div className="text-xs text-slate-400 space-y-1 pt-1">
+            <div>• Der Dateiname enthält Datum und Uhrzeit der Sicherung für einfache Zuordnung.</div>
+            <div>• Beim Import werden <strong>alle</strong> Daten vollständig ersetzt – vorher exportieren!</div>
+            <div>• Ältere Backups (Version 1) ohne Aufgaben-Daten werden ebenfalls unterstützt.</div>
           </div>
         </div>
       </Section>

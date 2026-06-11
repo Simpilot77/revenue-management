@@ -278,18 +278,29 @@ export default api;
 
 // ─── Database export / import ────────────────────────────────────────────────
 
+// All localStorage keys that are part of the app state
+const LS_KEYS = [
+  'booking_stats_overrides', // stats exclusions per booking
+  'cleaning_markers',        // manual cleaning day markers
+  'booking_tasks',           // task completion state per booking
+  'booking_task_dues',       // custom due date overrides per task
+  'company_settings',        // company name, address, bank details etc.
+];
+
 export function getDatabase() {
+  const ls = {};
+  for (const key of LS_KEYS) {
+    try {
+      const raw = localStorage.getItem(key);
+      ls[key] = raw ? JSON.parse(raw) : null;
+    } catch { ls[key] = null; }
+  }
   return {
-    version: 1,
+    version: 2,
     exported_at: new Date().toISOString(),
     bookings: BOOKINGS,
     customers: _customers,
-    booking_stats_overrides: (() => {
-      try { return JSON.parse(localStorage.getItem('booking_stats_overrides') || '{}'); } catch { return {}; }
-    })(),
-    cleaning_markers: (() => {
-      try { return JSON.parse(localStorage.getItem('cleaning_markers') || '{}'); } catch { return {}; }
-    })(),
+    ...ls,
   };
 }
 
@@ -301,11 +312,12 @@ export function importDatabase(data) {
   if (Array.isArray(data.customers)) {
     _customers.splice(0, _customers.length, ...data.customers);
   }
-  // Restore localStorage keys
-  if (data.booking_stats_overrides) {
-    localStorage.setItem('booking_stats_overrides', JSON.stringify(data.booking_stats_overrides));
-  }
-  if (data.cleaning_markers) {
-    localStorage.setItem('cleaning_markers', JSON.stringify(data.cleaning_markers));
+  // Restore all localStorage keys
+  for (const key of LS_KEYS) {
+    if (data[key] != null) {
+      localStorage.setItem(key, JSON.stringify(data[key]));
+    } else {
+      localStorage.removeItem(key);
+    }
   }
 }
