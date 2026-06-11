@@ -221,10 +221,15 @@ export default function BookingsListPage() {
   }, [bookings, sortField, sortDir]);
 
   const exportAllForPdf = async () => {
-    const params = { ...filters, page: 1, limit: 1000 };
-    Object.keys(params).forEach(k => !params[k] && delete params[k]);
-    const { data } = await api.get('/bookings', { params });
-    await exportBookingsList(data.data, filters);
+    try {
+      const params = { ...filters, page: 1, limit: 1000 };
+      Object.keys(params).forEach(k => !params[k] && delete params[k]);
+      const { data } = await api.get('/bookings', { params });
+      await exportBookingsList(data.data, filters);
+    } catch (err) {
+      console.error('PDF Export Fehler:', err);
+      alert(`PDF Export fehlgeschlagen: ${err?.message || err}`);
+    }
   };
 
   const handleDelete = async (id, name) => {

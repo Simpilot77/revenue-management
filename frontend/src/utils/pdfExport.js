@@ -330,7 +330,9 @@ async function loadLogoBase64(url) {
 }
 
 async function getReportLogo() {
-  return loadLogoBase64('/logo.png');
+  // Use import.meta.env.BASE_URL so the path works on both dev and GitHub Pages
+  const base = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/';
+  return loadLogoBase64(`${base}logo.png`);
 }
 
 // ─── Build editable invoice data object ─────────────────────────────────────
@@ -462,7 +464,8 @@ export async function exportInvoiceFromData(data) {
   const s = data._settings || getCompanySettings();
 
   // ── Logo (square, nearly 1:1 — 721×731) ──
-  const logoBase64 = await loadLogoBase64('/logo.png');
+  const base = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/';
+  const logoBase64 = await loadLogoBase64(`${base}logo.png`);
   if (logoBase64) {
     const LOGO_SZ = 30; // mm — square logo
     const lx = W - 14 - LOGO_SZ;
