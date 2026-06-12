@@ -127,17 +127,18 @@ export async function runLodgifySync(apiKey, houseMapRaw) {
   });
 
   // 2. Buchungen paginiert laden über /v1/reservation
+  // Lodgify v1 verwendet offset/limit (nicht page/size), total statt count
   const allReservations = [];
-  let page = 1;
-  const size = 50;
+  const limit = 50;
+  let offset = 0;
   while (true) {
-    const data = await get(apiKey, '/v1/reservation', { page, size });
+    const data = await get(apiKey, '/v1/reservation', { offset, limit });
     const items = data.items || [];
     if (!items.length) break;
     allReservations.push(...items);
-    const total = data.count ?? items.length;
-    if (allReservations.length >= total || items.length < size) break;
-    page++;
+    const total = data.total ?? 0;
+    if (allReservations.length >= total || items.length < limit) break;
+    offset += limit;
   }
 
   // 3. Transformation
