@@ -247,12 +247,44 @@ api.interceptors.request.use((config) => {
     data = { success: true };
   }
 
-  // Lodgify sync – ruft die Lodgify API direkt ab (API-Key aus Einstellungen)
+  // Lodgify sync
+  // Lokal (DEV): direkter API-Aufruf über Vite-Proxy
+  // Live (Produktion): liest sync.json, die GitHub Actions automatisch befüllt
   else if (url === 'admin/lodgify-sync' && config.method === 'post') {
-    // Credentials aus localStorage lesen
+
+    // ── Produktion: sync.json lesen ──────────────────────────────────────────
+    if (!import.meta.env.DEV) {
+      const base = import.meta.env.BASE_URL || '/';
+      const syncUrl = base + 'data/sync.json';
+      return fetch(syncUrl, { cache: 'no-store' })
+        .then(async res => {
+          const text = await res.text();
+          if (!text.trim().startsWith('{')) throw new Error('Noch kein Sync durchgeführt');
+          const syncData = JSON.parse(text);
+          const incoming = Array.isArray(syncData.bookings) ? syncData.bookings : [];
+          if (!incoming.length) throw new Error('sync.json enthält keine Buchungen');
+          BOOKINGS.splice(0, BOOKINGS.length, ...incoming);
+          const reservations = incoming.filter(b => !b.is_owner_block);
+          const blocks       = incoming.filter(b =>  b.is_owner_block);
+          const syncedAt = syncData.synced_at ? new Date(syncData.synced_at).toLocaleString('de-DE') : '—';
+          data = {
+            imported: reservations.length, owner_blocks: blocks.length,
+            synced_at: syncData.synced_at,
+            message: `✅ ${reservations.length} Buchungen + ${blocks.length} Eigentümer-Sperren geladen (Stand: ${syncedAt})`,
+          };
+          return Promise.reject({ isMockResponse: true, response: { status: 200, data, headers: {}, config } });
+        })
+        .catch(err => {
+          if (err.isMockResponse) return Promise.reject(err);
+          data = { imported: 0, owner_blocks: 0, synced_at: null,
+            message: `⚠️ Sync läuft automatisch alle 6 Stunden (${err.message})` };
+          return Promise.reject({ isMockResponse: true, response: { status: 200, data, headers: {}, config } });
+        });
+    }
+
+    // ── Lokal (DEV): direkter API-Aufruf über Vite-Proxy ────────────────────
     let settings = {};
     try { settings = JSON.parse(localStorage.getItem('company_settings') || '{}'); } catch (_) {}
-    // Schlüssel + Haus-Map: erst localStorage, dann .env.local
     const apiKey      = settings.lodgify_api_key  || ENV_API_KEY   || '';
     const houseMapRaw = settings.lodgify_house_map || ENV_HOUSE_MAP || '';
 
@@ -266,24 +298,19 @@ api.interceptors.request.use((config) => {
 
     return runLodgifySync(apiKey, houseMapRaw)
       .then(result => {
-        // BOOKINGS in-place ersetzen
         BOOKINGS.splice(0, BOOKINGS.length, ...result.bookings);
         const syncedAt = new Date(result.syncedAt).toLocaleString('de-DE');
         data = {
-          imported:     result.regular,
-          owner_blocks: result.ownerBlocks,
-          updated:      0,
-          synced_at:    result.syncedAt,
+          imported: result.regular, owner_blocks: result.ownerBlocks,
+          synced_at: result.syncedAt,
           message: `✅ Sync erfolgreich – ${result.regular} Buchungen + ${result.ownerBlocks} Eigentümer-Sperren (Stand: ${syncedAt})`,
         };
         return Promise.reject({ isMockResponse: true, response: { status: 200, data, headers: {}, config } });
       })
       .catch(err => {
         if (err.isMockResponse) return Promise.reject(err);
-        data = {
-          imported: 0, owner_blocks: 0, synced_at: null,
-          message: `❌ Sync fehlgeschlagen: ${err.message}`,
-        };
+        data = { imported: 0, owner_blocks: 0, synced_at: null,
+          message: `❌ Sync fehlgeschlagen: ${err.message}` };
         return Promise.reject({ isMockResponse: true, response: { status: 200, data, headers: {}, config } });
       });
   }

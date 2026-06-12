@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - main
+  # Auch nach einem Lodgify-Sync neu deployen
+  workflow_run:
+    workflows: ["Lodgify Sync"]
+    types: [completed]
 
 permissions:
   contents: read
@@ -23,6 +27,21 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Abhängigkeiten installieren
+        run: pip install requests -q
+
+      - name: Lodgify sync ausführen (sync.json befüllen)
+        env:
+          LODGIFY_API_KEY:    ${{ secrets.LODGIFY_API_KEY }}
+          LODGIFY_ACCOUNT_ID: ${{ secrets.LODGIFY_ACCOUNT_ID }}
+          HOUSE_MAP:          ${{ secrets.LODGIFY_HOUSE_MAP }}
+        run: python .github/scripts/lodgify_sync.py
 
       - name: Setup Node
         uses: actions/setup-node@v4
