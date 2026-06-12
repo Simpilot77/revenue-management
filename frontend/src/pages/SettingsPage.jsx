@@ -238,13 +238,28 @@ export default function SettingsPage() {
           </p>
           <div className="grid sm:grid-cols-2 gap-4">
             <Field label="Lodgify API Key">
-              <input
-                className="form-input w-full font-mono text-sm"
-                type="password"
-                placeholder="Dein Lodgify API-Schlüssel"
-                value={settings.lodgify_api_key || ''}
-                onChange={e => set('lodgify_api_key', e.target.value)}
-              />
+              <div className="relative">
+                <input
+                  className="form-input w-full font-mono text-sm pr-16"
+                  type="text"
+                  placeholder="Hier reinziehen oder einfügen (Cmd+V)"
+                  value={settings.lodgify_api_key || ''}
+                  onChange={e => set('lodgify_api_key', e.target.value)}
+                  onDrop={e => { e.preventDefault(); set('lodgify_api_key', e.dataTransfer.getData('text')); }}
+                  onDragOver={e => e.preventDefault()}
+                />
+                {settings.lodgify_api_key && (
+                  <button
+                    type="button"
+                    onClick={() => set('lodgify_api_key', '')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-red-400 hover:text-red-600 px-1"
+                    title="Löschen"
+                  >✕</button>
+                )}
+              </div>
+              {settings.lodgify_api_key && (
+                <div className="text-xs text-green-600 mt-1">✓ API-Schlüssel hinterlegt ({settings.lodgify_api_key.length} Zeichen)</div>
+              )}
             </Field>
             <Field label="Haus-Zuordnung (optional)">
               <input
