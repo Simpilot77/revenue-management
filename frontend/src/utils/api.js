@@ -246,16 +246,54 @@ api.interceptors.request.use((config) => {
     data = { success: true };
   }
 
-  // Lodgify sync (mock: returns success with owner-block count)
+  // Lodgify sync – lädt sync.json (von GitHub Actions befüllt) oder fällt auf Mock zurück
   else if (url === 'admin/lodgify-sync' && config.method === 'post') {
-    const ownerBlocks = BOOKINGS.filter(b => b.is_owner_block);
-    const regularBookings = BOOKINGS.filter(b => !b.is_owner_block);
-    data = {
-      imported: regularBookings.length,
-      owner_blocks: ownerBlocks.length,
-      updated: 0,
-      message: `Sync abgeschlossen – ${regularBookings.length} Buchungen und ${ownerBlocks.length} Eigentümer-Sperren geladen`,
-    };
+    const base = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/';
+    const syncUrl = `${base}data/sync.json`;
+
+    return fetch(syncUrl, { cache: 'no-store' })
+      .then(async res => {
+        if (!res.ok) throw new Error(`sync.json nicht gefunden (${res.status})`);
+        const text = await res.text();
+        // Vite Dev Server gibt bei fehlender Datei index.html (HTML) zurück → abfangen
+        if (!text.trim().startsWith('{')) throw new Error('sync.json nicht gefunden (noch kein Sync durchgeführt)');
+        const syncData = JSON.parse(text);
+        const incoming = Array.isArray(syncData.bookings) ? syncData.bookings : [];
+
+        if (incoming.length === 0) throw new Error('sync.json enthält keine Buchungen');
+
+        // BOOKINGS komplett ersetzen
+        BOOKINGS.splice(0, BOOKINGS.length, ...incoming);
+
+        const reservations = incoming.filter(b => !b.is_owner_block);
+        const blocks       = incoming.filter(b =>  b.is_owner_block);
+        const syncedAt     = syncData.synced_at
+          ? new Date(syncData.synced_at).toLocaleString('de-DE')
+          : '—';
+
+        data = {
+          imported:     reservations.length,
+          owner_blocks: blocks.length,
+          updated:      0,
+          synced_at:    syncData.synced_at,
+          message: `✅ Sync erfolgreich – ${reservations.length} Buchungen + ${blocks.length} Eigentümer-Sperren (Stand: ${syncedAt})`,
+        };
+        return Promise.reject({ isMockResponse: true, response: { status: 200, data, headers: {}, config } });
+      })
+      .catch(err => {
+        // Kein sync.json vorhanden → Demo-Daten anzeigen
+        if (err.isMockResponse) return Promise.reject(err);
+        const ownerBlocks    = BOOKINGS.filter(b =>  b.is_owner_block);
+        const regularBookings = BOOKINGS.filter(b => !b.is_owner_block);
+        data = {
+          imported:     regularBookings.length,
+          owner_blocks: ownerBlocks.length,
+          updated:      0,
+          synced_at:    null,
+          message: `⚠️ Demo-Daten aktiv (${err.message}) – ${regularBookings.length} Buchungen, ${ownerBlocks.length} Sperren`,
+        };
+        return Promise.reject({ isMockResponse: true, response: { status: 200, data, headers: {}, config } });
+      });
   }
 
   if (data !== null) {
