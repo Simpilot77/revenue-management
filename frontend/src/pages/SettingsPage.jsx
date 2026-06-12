@@ -253,10 +253,23 @@ export default function SettingsPage() {
               />
             </Field>
           </div>
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-2">
+            <div className="text-sm font-semibold text-blue-800">🔧 Einrichtung (einmalig)</div>
+            <ol className="text-xs text-blue-700 space-y-1 list-decimal list-inside">
+              <li>Gehe zu <strong>github.com/Simpilot77/revenue-management → Settings → Secrets → Actions</strong></li>
+              <li>Lege diese Secrets an:</li>
+            </ol>
+            <div className="font-mono text-xs bg-white border border-blue-100 rounded p-3 space-y-1">
+              <div><span className="text-blue-600 font-semibold">LODGIFY_API_KEY</span> = {settings.lodgify_api_key ? '••••••••' : '<dein API-Schlüssel>'}</div>
+              <div><span className="text-blue-600 font-semibold">LODGIFY_ACCOUNT_ID</span> = {settings.lodgify_account_id || '<z.B. 834414>'}</div>
+              <div><span className="text-blue-600 font-semibold">LODGIFY_HOUSE_MAP</span> = {'{"<Lodgify-ID>": 1, ...}'}</div>
+            </div>
+            <div className="text-xs text-blue-600">Nach der Einrichtung läuft der Sync automatisch alle 6 Stunden. Manuell: Dashboard → 🔄 Lodgify Import</div>
+          </div>
           <div className="text-xs text-slate-400 space-y-1">
             <div>• Den API-Schlüssel findest du in Lodgify unter <strong>Einstellungen → API</strong>.</div>
-            <div>• Der Sync importiert reguläre Buchungen (alle Kanäle) sowie Eigentümer-Sperren (Owner Blocks).</div>
-            <div>• Eigentümer-Sperren erscheinen im Kalender und der Belegungsübersicht in <span className="font-semibold text-slate-600">Dunkelgrau</span> mit 🔒-Symbol.</div>
+            <div>• <code className="bg-slate-100 px-1 rounded">LODGIFY_HOUSE_MAP</code>: JSON-Objekt, das Lodgify-Property-IDs auf unsere Haus-IDs (1/2/3) abbildet. Beispiel: <code className="bg-slate-100 px-1 rounded">{'{"123456":1,"234567":2,"345678":3}'}</code></div>
+            <div>• Eigentümer-Sperren erscheinen im Kalender <span className="font-semibold text-slate-600">dunkelgrau</span> mit 🔒-Symbol.</div>
           </div>
         </div>
       </Section>
