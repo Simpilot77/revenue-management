@@ -9,6 +9,17 @@ import { runLodgifySync, ENV_API_KEY, ENV_HOUSE_MAP } from './lodgifyClient';
 // In-memory mutable customers array
 let _customers = [...CUSTOMERS];
 
+// ── Buchungen aus letztem Lodgify-Import laden (überschreibt Mock-Daten) ─────
+try {
+  const saved = localStorage.getItem('lodgify_bookings');
+  if (saved) {
+    const parsed = JSON.parse(saved);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      BOOKINGS.splice(0, BOOKINGS.length, ...parsed);
+    }
+  }
+} catch (_) {}
+
 // Apply persisted included_in_stats overrides from localStorage
 try {
   const _statsOverrides = JSON.parse(localStorage.getItem('booking_stats_overrides') || '{}');
@@ -264,6 +275,7 @@ api.interceptors.request.use((config) => {
           const incoming = Array.isArray(syncData.bookings) ? syncData.bookings : [];
           if (!incoming.length) throw new Error('sync.json enthält keine Buchungen');
           BOOKINGS.splice(0, BOOKINGS.length, ...incoming);
+          try { localStorage.setItem('lodgify_bookings', JSON.stringify(incoming)); } catch (_) {}
           const reservations = incoming.filter(b => !b.is_owner_block);
           const blocks       = incoming.filter(b =>  b.is_owner_block);
           const syncedAt = syncData.synced_at ? new Date(syncData.synced_at).toLocaleString('de-DE') : '—';
@@ -299,6 +311,7 @@ api.interceptors.request.use((config) => {
     return runLodgifySync(apiKey, houseMapRaw)
       .then(result => {
         BOOKINGS.splice(0, BOOKINGS.length, ...result.bookings);
+        try { localStorage.setItem('lodgify_bookings', JSON.stringify(result.bookings)); } catch (_) {}
         const syncedAt = new Date(result.syncedAt).toLocaleString('de-DE');
         data = {
           imported: result.regular, owner_blocks: result.ownerBlocks,
@@ -349,6 +362,7 @@ const LS_KEYS = [
   'booking_tasks',           // task completion state per booking
   'booking_task_dues',       // custom due date overrides per task
   'company_settings',        // company name, address, bank details etc.
+  'lodgify_bookings',        // letzter Lodgify-Import (persistiert über Reloads)
 ];
 
 export function getDatabase() {
