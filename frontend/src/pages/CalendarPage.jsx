@@ -19,12 +19,14 @@ const STATUS_COLOR = {
   ausgecheckt: '#9ca3af',
   angefragt:   '#f59e0b',
   bestaetigt:  '#1d4ed8',
+  gesperrt:    '#475569', // dark slate – owner block
 };
 const STATUS_COLOR_DARK = {
   eingecheckt: '#15803d',
   ausgecheckt: '#6b7280',
   angefragt:   '#d97706',
   bestaetigt:  '#1e40af',
+  gesperrt:    '#334155',
 };
 const getColor = (status) => STATUS_COLOR[status] || '#1d4ed8';
 const getDarkColor = (status) => STATUS_COLOR_DARK[status] || '#1e40af';
@@ -136,12 +138,15 @@ export default function CalendarPage() {
     saveCleaningMarkersToStorage(updated);
   };
 
+  const VISIBLE_STATUSES = ['bestaetigt','eingecheckt','ausgecheckt','angefragt','gesperrt'];
+
   const getCellInfo = (houseId, day) => {
     const d = dateStr(year, month, day);
     const active = bookings.filter(b =>
       b.house_id === houseId &&
-      ['bestaetigt','eingecheckt','ausgecheckt'].includes(b.status)
+      VISIBLE_STATUSES.includes(b.status)
     );
+    // Owner blocks take lowest priority – regular bookings shown first
     const checkin  = active.find(b => b.checkin_date?.slice(0,10) === d);
     const checkout = active.find(b => b.checkout_date?.slice(0,10) === d);
     const staying  = active.find(b =>
@@ -161,50 +166,71 @@ export default function CalendarPage() {
   };
 
   // Multi-line label rendered inside the booking bar — width = actual booking span in pixels
-  const BookingLabel = ({ booking, isDupe, spanWidth }) => (
-    <div style={{
-      position: 'absolute',
-      left: '6px',
-      top: '4px',
-      width: spanWidth ? `${spanWidth}px` : '280px',
-      overflow: 'visible',
-      color: 'white',
-      zIndex: 10,
-      pointerEvents: 'none',
-      lineHeight: 1.4,
-    }}>
-      {/* Guest name */}
-      <div style={{ fontSize: '0.65rem', fontWeight: 700, textShadow: '0 1px 2px rgba(0,0,0,0.55)', wordBreak: 'break-word' }}>
-        {isDupe && <span style={{ backgroundColor: '#f97316', borderRadius: '2px', padding: '0 2px', marginRight: '3px', fontSize: '0.58rem' }}>⚠ Doppelt</span>}
-        {booking.guest_name}
+  const BookingLabel = ({ booking, isDupe, spanWidth }) => {
+    const isBlock = booking.status === 'gesperrt';
+    return (
+      <div style={{
+        position: 'absolute',
+        left: '6px',
+        top: '4px',
+        width: spanWidth ? `${spanWidth}px` : '280px',
+        overflow: 'visible',
+        color: 'white',
+        zIndex: 10,
+        pointerEvents: 'none',
+        lineHeight: 1.4,
+      }}>
+        {isBlock ? (
+          <>
+            <div style={{ fontSize: '0.65rem', fontWeight: 700, textShadow: '0 1px 2px rgba(0,0,0,0.6)', whiteSpace: 'nowrap' }}>
+              🔒 Gesperrt
+            </div>
+            {booking.block_reason && (
+              <div style={{ fontSize: '0.6rem', opacity: 0.9, textShadow: '0 1px 2px rgba(0,0,0,0.4)', whiteSpace: 'nowrap' }}>
+                {booking.block_reason}
+              </div>
+            )}
+            <div style={{ fontSize: '0.58rem', opacity: 0.8, textShadow: '0 1px 2px rgba(0,0,0,0.4)', whiteSpace: 'nowrap' }}>
+              {booking.nights} {booking.nights === 1 ? 'Nacht' : 'Nächte'}
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Guest name */}
+            <div style={{ fontSize: '0.65rem', fontWeight: 700, textShadow: '0 1px 2px rgba(0,0,0,0.55)', wordBreak: 'break-word' }}>
+              {isDupe && <span style={{ backgroundColor: '#f97316', borderRadius: '2px', padding: '0 2px', marginRight: '3px', fontSize: '0.58rem' }}>⚠ Doppelt</span>}
+              {booking.guest_name}
+            </div>
+            {/* Persons + deposit */}
+            <div style={{ fontSize: '0.6rem', opacity: 0.92, textShadow: '0 1px 2px rgba(0,0,0,0.4)', whiteSpace: 'nowrap' }}>
+              👥 {booking.guest_count} {booking.guest_count === 1 ? 'Person' : 'Personen'}
+              {booking.deposit_taken && !booking.deposit_returned ? '  🔒 Kaution' : ''}
+            </div>
+            {/* Total price */}
+            <div style={{ fontSize: '0.6rem', opacity: 0.92, fontWeight: 600, textShadow: '0 1px 2px rgba(0,0,0,0.4)', whiteSpace: 'nowrap' }}>
+              💶 {formatCurrency(booking.total_price)}
+            </div>
+            {/* ADR */}
+            {booking.daily_rate > 0 && (
+              <div style={{ fontSize: '0.6rem', opacity: 0.9, textShadow: '0 1px 2px rgba(0,0,0,0.4)', whiteSpace: 'nowrap' }}>
+                ADR {formatCurrency(booking.daily_rate)}
+              </div>
+            )}
+            {/* Invoice number */}
+            {booking.invoice_number && (
+              <div style={{ fontSize: '0.58rem', opacity: 0.88, fontFamily: 'monospace', textShadow: '0 1px 2px rgba(0,0,0,0.4)', whiteSpace: 'nowrap' }}>
+                🧾 {booking.invoice_number}
+              </div>
+            )}
+            {/* Guest registration */}
+            <div style={{ fontSize: '0.58rem', opacity: 0.88, textShadow: '0 1px 2px rgba(0,0,0,0.4)', whiteSpace: 'nowrap' }}>
+              {booking.guests_registered ? '✅ Gäste registriert' : '☐ Gäste nicht registriert'}
+            </div>
+          </>
+        )}
       </div>
-      {/* Persons + deposit */}
-      <div style={{ fontSize: '0.6rem', opacity: 0.92, textShadow: '0 1px 2px rgba(0,0,0,0.4)', whiteSpace: 'nowrap' }}>
-        👥 {booking.guest_count} {booking.guest_count === 1 ? 'Person' : 'Personen'}
-        {booking.deposit_taken && !booking.deposit_returned ? '  🔒 Kaution' : ''}
-      </div>
-      {/* Total price */}
-      <div style={{ fontSize: '0.6rem', opacity: 0.92, fontWeight: 600, textShadow: '0 1px 2px rgba(0,0,0,0.4)', whiteSpace: 'nowrap' }}>
-        💶 {formatCurrency(booking.total_price)}
-      </div>
-      {/* ADR (average daily rate) */}
-      {booking.daily_rate > 0 && (
-        <div style={{ fontSize: '0.6rem', opacity: 0.9, textShadow: '0 1px 2px rgba(0,0,0,0.4)', whiteSpace: 'nowrap' }}>
-          ADR {formatCurrency(booking.daily_rate)}
-        </div>
-      )}
-      {/* Invoice number */}
-      {booking.invoice_number && (
-        <div style={{ fontSize: '0.58rem', opacity: 0.88, fontFamily: 'monospace', textShadow: '0 1px 2px rgba(0,0,0,0.4)', whiteSpace: 'nowrap' }}>
-          🧾 {booking.invoice_number}
-        </div>
-      )}
-      {/* Guest registration */}
-      <div style={{ fontSize: '0.58rem', opacity: 0.88, textShadow: '0 1px 2px rgba(0,0,0,0.4)', whiteSpace: 'nowrap' }}>
-        {booking.guests_registered ? '✅ Gäste registriert' : '☐ Gäste nicht registriert'}
-      </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="p-6 space-y-4">
@@ -412,6 +438,7 @@ export default function CalendarPage() {
         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded inline-block" style={{ backgroundColor: '#16a34a' }}></span> Eingecheckt</span>
         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded inline-block" style={{ backgroundColor: '#9ca3af' }}></span> Ausgecheckt</span>
         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded inline-block" style={{ backgroundColor: '#f59e0b' }}></span> Angefragt</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded inline-block" style={{ backgroundColor: '#475569' }}></span> 🔒 Eigentümer gesperrt</span>
         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded inline-block" style={{ backgroundColor: 'rgba(239,68,68,0.3)', border: '1px solid #ef4444' }}></span> 🧹 Geplant</span>
         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded inline-block" style={{ backgroundColor: 'rgba(251,191,36,0.4)', border: '1px solid #f59e0b' }}></span> 🧹 Organisiert</span>
         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded inline-block" style={{ backgroundColor: 'rgba(34,197,94,0.3)', border: '1px solid #22c55e' }}></span> 🧹 Erledigt</span>
@@ -550,7 +577,7 @@ function MiniOverview({ houses, navigate, cleaningMarkers }) {
             key={house.id}
             house={house}
             months={months}
-            bookings={allBookings.filter(b => b.house_id === house.id && ['bestaetigt','eingecheckt','ausgecheckt'].includes(b.status))}
+            bookings={allBookings.filter(b => b.house_id === house.id && ['bestaetigt','eingecheckt','ausgecheckt','angefragt','gesperrt'].includes(b.status))}
             navigate={navigate}
             cleaningMarkers={cleaningMarkers}
           />

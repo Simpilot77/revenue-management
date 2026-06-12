@@ -23,6 +23,8 @@ const DEFAULT_SETTINGS = {
   houses: Object.fromEntries(
     HOUSES.map(h => [h.id, { address: `Laagbergstraße ${h.house_number}, 38440 Wolfsburg`, description: h.description }])
   ),
+  lodgify_api_key: '',
+  lodgify_account_id: '',
 };
 
 function Section({ title, children }) {
@@ -226,7 +228,40 @@ export default function SettingsPage() {
         </div>
       </Section>
 
-      {/* 7. Datenbank Export / Import */}
+      {/* 7. Lodgify-Integration */}
+      <Section title="🔗 Lodgify-Integration">
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            API-Schlüssel für die Lodgify-Synchronisation. Der Sync importiert Buchungen <strong>und Eigentümer-Sperren</strong> aus Lodgify.
+          </p>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <Field label="Lodgify API Key">
+              <input
+                className="form-input w-full font-mono text-sm"
+                type="password"
+                placeholder="Ihr Lodgify API-Schlüssel"
+                value={settings.lodgify_api_key || ''}
+                onChange={e => set('lodgify_api_key', e.target.value)}
+              />
+            </Field>
+            <Field label="Lodgify Account-ID">
+              <input
+                className="form-input w-full font-mono text-sm"
+                placeholder="z.B. 834414"
+                value={settings.lodgify_account_id || ''}
+                onChange={e => set('lodgify_account_id', e.target.value)}
+              />
+            </Field>
+          </div>
+          <div className="text-xs text-slate-400 space-y-1">
+            <div>• Den API-Schlüssel findest du in Lodgify unter <strong>Einstellungen → API</strong>.</div>
+            <div>• Der Sync importiert reguläre Buchungen (alle Kanäle) sowie Eigentümer-Sperren (Owner Blocks).</div>
+            <div>• Eigentümer-Sperren erscheinen im Kalender und der Belegungsübersicht in <span className="font-semibold text-slate-600">Dunkelgrau</span> mit 🔒-Symbol.</div>
+          </div>
+        </div>
+      </Section>
+
+      {/* 8. Datenbank Export / Import */}
       <Section title="💾 Vollständige Datensicherung – Export & Import">
         <div className="space-y-4">
           <p className="text-sm text-slate-600">

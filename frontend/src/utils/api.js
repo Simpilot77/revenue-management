@@ -246,9 +246,16 @@ api.interceptors.request.use((config) => {
     data = { success: true };
   }
 
-  // Lodgify sync (mock: returns success)
+  // Lodgify sync (mock: returns success with owner-block count)
   else if (url === 'admin/lodgify-sync' && config.method === 'post') {
-    data = { imported: BOOKINGS.length, updated: 0, message: `Sync abgeschlossen – ${BOOKINGS.length} Buchungen geladen` };
+    const ownerBlocks = BOOKINGS.filter(b => b.is_owner_block);
+    const regularBookings = BOOKINGS.filter(b => !b.is_owner_block);
+    data = {
+      imported: regularBookings.length,
+      owner_blocks: ownerBlocks.length,
+      updated: 0,
+      message: `Sync abgeschlossen – ${regularBookings.length} Buchungen und ${ownerBlocks.length} Eigentümer-Sperren geladen`,
+    };
   }
 
   if (data !== null) {

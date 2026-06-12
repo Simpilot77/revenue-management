@@ -26,6 +26,7 @@ export const STATUS_LABELS = {
   ausgecheckt: 'Ausgecheckt',
   storniert: 'Storniert',
   no_show: 'No-Show',
+  gesperrt: 'Gesperrt (Eigentümer)',
 };
 
 export const STATUS_COLORS = {
@@ -35,6 +36,7 @@ export const STATUS_COLORS = {
   ausgecheckt: 'bg-gray-100 text-gray-700',
   storniert: 'bg-red-100 text-red-800',
   no_show: 'bg-orange-100 text-orange-800',
+  gesperrt: 'bg-slate-200 text-slate-600',
 };
 
 export const PAYMENT_STATUS_LABELS = {
