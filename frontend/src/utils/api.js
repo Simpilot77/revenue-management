@@ -4,6 +4,7 @@ import {
   calcKpis, calcMonthly, calcChannels, calcPickup,
   calcLeadTime, calcYoY, calcForecast, calcHouses, calcGuestDistribution,
 } from './mockData';
+import { runLodgifySync } from './lodgifyClient';
 
 // In-memory mutable customers array
 let _customers = [...CUSTOMERS];
@@ -246,51 +247,41 @@ api.interceptors.request.use((config) => {
     data = { success: true };
   }
 
-  // Lodgify sync – lädt sync.json (von GitHub Actions befüllt) oder fällt auf Mock zurück
+  // Lodgify sync – ruft die Lodgify API direkt ab (API-Key aus Einstellungen)
   else if (url === 'admin/lodgify-sync' && config.method === 'post') {
-    const base = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/';
-    const syncUrl = `${base}data/sync.json`;
+    // Credentials aus localStorage lesen
+    let settings = {};
+    try { settings = JSON.parse(localStorage.getItem('company_settings') || '{}'); } catch (_) {}
+    const apiKey      = settings.lodgify_api_key || '';
+    const houseMapRaw = settings.lodgify_house_map || '';
 
-    return fetch(syncUrl, { cache: 'no-store' })
-      .then(async res => {
-        if (!res.ok) throw new Error(`sync.json nicht gefunden (${res.status})`);
-        const text = await res.text();
-        // Vite Dev Server gibt bei fehlender Datei index.html (HTML) zurück → abfangen
-        if (!text.trim().startsWith('{')) throw new Error('sync.json nicht gefunden (noch kein Sync durchgeführt)');
-        const syncData = JSON.parse(text);
-        const incoming = Array.isArray(syncData.bookings) ? syncData.bookings : [];
+    if (!apiKey) {
+      data = {
+        imported: 0, owner_blocks: 0, synced_at: null,
+        message: '❌ Kein API-Schlüssel hinterlegt. Bitte unter Einstellungen → Lodgify-Integration eingeben.',
+      };
+      return Promise.reject({ isMockResponse: true, response: { status: 200, data, headers: {}, config } });
+    }
 
-        if (incoming.length === 0) throw new Error('sync.json enthält keine Buchungen');
-
-        // BOOKINGS komplett ersetzen
-        BOOKINGS.splice(0, BOOKINGS.length, ...incoming);
-
-        const reservations = incoming.filter(b => !b.is_owner_block);
-        const blocks       = incoming.filter(b =>  b.is_owner_block);
-        const syncedAt     = syncData.synced_at
-          ? new Date(syncData.synced_at).toLocaleString('de-DE')
-          : '—';
-
+    return runLodgifySync(apiKey, houseMapRaw)
+      .then(result => {
+        // BOOKINGS in-place ersetzen
+        BOOKINGS.splice(0, BOOKINGS.length, ...result.bookings);
+        const syncedAt = new Date(result.syncedAt).toLocaleString('de-DE');
         data = {
-          imported:     reservations.length,
-          owner_blocks: blocks.length,
+          imported:     result.regular,
+          owner_blocks: result.ownerBlocks,
           updated:      0,
-          synced_at:    syncData.synced_at,
-          message: `✅ Sync erfolgreich – ${reservations.length} Buchungen + ${blocks.length} Eigentümer-Sperren (Stand: ${syncedAt})`,
+          synced_at:    result.syncedAt,
+          message: `✅ Sync erfolgreich – ${result.regular} Buchungen + ${result.ownerBlocks} Eigentümer-Sperren (Stand: ${syncedAt})`,
         };
         return Promise.reject({ isMockResponse: true, response: { status: 200, data, headers: {}, config } });
       })
       .catch(err => {
-        // Kein sync.json vorhanden → Demo-Daten anzeigen
         if (err.isMockResponse) return Promise.reject(err);
-        const ownerBlocks    = BOOKINGS.filter(b =>  b.is_owner_block);
-        const regularBookings = BOOKINGS.filter(b => !b.is_owner_block);
         data = {
-          imported:     regularBookings.length,
-          owner_blocks: ownerBlocks.length,
-          updated:      0,
-          synced_at:    null,
-          message: `⚠️ Demo-Daten aktiv (${err.message}) – ${regularBookings.length} Buchungen, ${ownerBlocks.length} Sperren`,
+          imported: 0, owner_blocks: 0, synced_at: null,
+          message: `❌ Sync fehlgeschlagen: ${err.message}`,
         };
         return Promise.reject({ isMockResponse: true, response: { status: 200, data, headers: {}, config } });
       });

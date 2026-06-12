@@ -7,6 +7,13 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': 'http://localhost:3001',
+      // Proxy für Lodgify API (umgeht CORS im Dev-Server)
+      '/lodgify-proxy': {
+        target: 'https://api.lodgify.com',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/lodgify-proxy/, ''),
+      },
     },
   },
 });

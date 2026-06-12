@@ -25,6 +25,7 @@ const DEFAULT_SETTINGS = {
   ),
   lodgify_api_key: '',
   lodgify_account_id: '',
+  lodgify_house_map: '',
 };
 
 function Section({ title, children }) {
@@ -232,44 +233,34 @@ export default function SettingsPage() {
       <Section title="🔗 Lodgify-Integration">
         <div className="space-y-4">
           <p className="text-sm text-slate-600">
-            API-Schlüssel für die Lodgify-Synchronisation. Der Sync importiert Buchungen <strong>und Eigentümer-Sperren</strong> aus Lodgify.
+            Gib hier deinen Lodgify API-Schlüssel ein. Danach importiert der Button <strong>„🔄 Lodgify Import"</strong> auf dem Dashboard
+            alle Buchungen und Eigentümer-Sperren direkt aus Lodgify.
           </p>
           <div className="grid sm:grid-cols-2 gap-4">
             <Field label="Lodgify API Key">
               <input
                 className="form-input w-full font-mono text-sm"
                 type="password"
-                placeholder="Ihr Lodgify API-Schlüssel"
+                placeholder="Dein Lodgify API-Schlüssel"
                 value={settings.lodgify_api_key || ''}
                 onChange={e => set('lodgify_api_key', e.target.value)}
               />
             </Field>
-            <Field label="Lodgify Account-ID">
+            <Field label="Haus-Zuordnung (optional)">
               <input
                 className="form-input w-full font-mono text-sm"
-                placeholder="z.B. 834414"
-                value={settings.lodgify_account_id || ''}
-                onChange={e => set('lodgify_account_id', e.target.value)}
+                placeholder='{"123456":1,"234567":2,"345678":3}'
+                value={settings.lodgify_house_map || ''}
+                onChange={e => set('lodgify_house_map', e.target.value)}
               />
             </Field>
           </div>
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-2">
-            <div className="text-sm font-semibold text-blue-800">🔧 Einrichtung (einmalig)</div>
-            <ol className="text-xs text-blue-700 space-y-1 list-decimal list-inside">
-              <li>Gehe zu <strong>github.com/Simpilot77/revenue-management → Settings → Secrets → Actions</strong></li>
-              <li>Lege diese Secrets an:</li>
-            </ol>
-            <div className="font-mono text-xs bg-white border border-blue-100 rounded p-3 space-y-1">
-              <div><span className="text-blue-600 font-semibold">LODGIFY_API_KEY</span> = {settings.lodgify_api_key ? '••••••••' : '<dein API-Schlüssel>'}</div>
-              <div><span className="text-blue-600 font-semibold">LODGIFY_ACCOUNT_ID</span> = {settings.lodgify_account_id || '<z.B. 834414>'}</div>
-              <div><span className="text-blue-600 font-semibold">LODGIFY_HOUSE_MAP</span> = {'{"<Lodgify-ID>": 1, ...}'}</div>
-            </div>
-            <div className="text-xs text-blue-600">Nach der Einrichtung läuft der Sync automatisch alle 6 Stunden. Manuell: Dashboard → 🔄 Lodgify Import</div>
-          </div>
-          <div className="text-xs text-slate-400 space-y-1">
-            <div>• Den API-Schlüssel findest du in Lodgify unter <strong>Einstellungen → API</strong>.</div>
-            <div>• <code className="bg-slate-100 px-1 rounded">LODGIFY_HOUSE_MAP</code>: JSON-Objekt, das Lodgify-Property-IDs auf unsere Haus-IDs (1/2/3) abbildet. Beispiel: <code className="bg-slate-100 px-1 rounded">{'{"123456":1,"234567":2,"345678":3}'}</code></div>
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-2 text-xs text-blue-700">
+            <div className="font-semibold text-blue-800 text-sm">ℹ️ Hinweise</div>
+            <div>• Den API-Schlüssel findest du in Lodgify unter <strong>Einstellungen → Integrationen → API</strong>.</div>
+            <div>• <strong>Haus-Zuordnung</strong>: Lodgify Property-IDs auf Haus-Nummern (1/2/3) abbilden. Beispiel: <code className="bg-white px-1 rounded">{'{"123456":1,"234567":2}'}</code>. Ohne Angabe wird die Reihenfolge aus Lodgify verwendet.</div>
             <div>• Eigentümer-Sperren erscheinen im Kalender <span className="font-semibold text-slate-600">dunkelgrau</span> mit 🔒-Symbol.</div>
+            <div>• Nach dem Speichern einfach auf dem Dashboard auf <strong>🔄 Lodgify Import</strong> klicken.</div>
           </div>
         </div>
       </Section>
