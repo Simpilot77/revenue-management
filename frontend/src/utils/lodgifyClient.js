@@ -162,10 +162,16 @@ export async function runLodgifySync(apiKey, houseMapRaw) {
     const status   = isBlock ? 'gesperrt' : (STATUS_MAP[statusRaw] || 'bestaetigt');
 
     const guest     = (typeof r.guest === 'object' && r.guest) ? r.guest : {};
+    // r.guest_name can be an object {first_name, last_name, full_name} or a plain string
+    const guestNameRaw = r.guest_name;
+    const guestNameObj = (typeof guestNameRaw === 'object' && guestNameRaw) ? guestNameRaw : null;
     const guestName = isBlock ? 'Eigentümer (gesperrt)'
-      : (guest.full_name || guest.guest_name || guest.name
+      : (guestNameObj?.full_name
+         || (guestNameObj ? `${guestNameObj.first_name || ''} ${guestNameObj.last_name || ''}`.trim() : '')
+         || guest.full_name || guest.name
          || `${guest.first_name || ''} ${guest.last_name || ''}`.trim()
-         || r.guest_name || 'Unbekannt');
+         || (typeof guestNameRaw === 'string' ? guestNameRaw : '')
+         || 'Unbekannt');
 
     const people   = r.people || {};
     const adults   = typeof people === 'object' ? (people.adults || people.adults_count || 0) : Number(people || 1);
@@ -202,7 +208,7 @@ export async function runLodgifySync(apiKey, houseMapRaw) {
       cleaning_fee:     0,
       discount_percent: 0,
       total_price:      totalPrice,
-      currency:         r.currency || 'EUR',
+      currency:         (typeof r.currency === 'object' ? (r.currency?.code || 'EUR') : r.currency) || 'EUR',
       payment_method:   'ueberweisung',
       payment_status:   (r.total_paid >= r.total_amount && r.total_amount > 0) ? 'bezahlt' : 'offen',
       invoice_number:   null,

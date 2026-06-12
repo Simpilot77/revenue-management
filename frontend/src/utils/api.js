@@ -10,6 +10,24 @@ import { runLodgifySync, ENV_API_KEY, ENV_HOUSE_MAP } from './lodgifyClient';
 let _customers = [...CUSTOMERS];
 
 // ── Buchungen aus letztem Lodgify-Import laden (überschreibt Mock-Daten) ─────
+// Normalize fields that Lodgify can return as objects instead of primitives
+function normalizeBookings(list) {
+  list.forEach(b => {
+    // guest_name: Lodgify may return {first_name, last_name, full_name}
+    if (typeof b.guest_name === 'object' && b.guest_name !== null) {
+      const gn = b.guest_name;
+      b.guest_name = gn.full_name
+        || `${gn.first_name || ''} ${gn.last_name || ''}`.trim()
+        || 'Unbekannt';
+    }
+    // currency: Lodgify may return {id, code, name, ...}
+    if (typeof b.currency === 'object' && b.currency !== null) {
+      b.currency = b.currency.code || 'EUR';
+    }
+  });
+  return list;
+}
+
 function enrichBookings(list) {
   const PORTAL_IDS = new Set([2, 3, 4, 5, 7]);
   list.forEach(b => {
@@ -32,6 +50,7 @@ try {
   if (saved) {
     const parsed = JSON.parse(saved);
     if (Array.isArray(parsed) && parsed.length > 0) {
+      normalizeBookings(parsed);
       enrichBookings(parsed);
       BOOKINGS.splice(0, BOOKINGS.length, ...parsed);
     }
@@ -292,6 +311,7 @@ api.interceptors.request.use((config) => {
           const syncData = JSON.parse(text);
           const incoming = Array.isArray(syncData.bookings) ? syncData.bookings : [];
           if (!incoming.length) throw new Error('sync.json enthält keine Buchungen');
+          normalizeBookings(incoming);
           enrichBookings(incoming);
           BOOKINGS.splice(0, BOOKINGS.length, ...incoming);
           try { localStorage.setItem('lodgify_bookings', JSON.stringify(incoming)); } catch (_) {}
@@ -329,6 +349,7 @@ api.interceptors.request.use((config) => {
 
     return runLodgifySync(apiKey, houseMapRaw)
       .then(result => {
+        normalizeBookings(result.bookings);
         enrichBookings(result.bookings);
         BOOKINGS.splice(0, BOOKINGS.length, ...result.bookings);
         try { localStorage.setItem('lodgify_bookings', JSON.stringify(result.bookings)); } catch (_) {}
