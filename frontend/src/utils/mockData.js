@@ -639,30 +639,105 @@ export function calcKpis(from, to, houseId) {
   };
 }
 
+// Verteilt eine Buchung anteilig auf die Monate, die der Aufenthalt umfasst.
+// Gibt { 'YYYY-MM': { nights, revenue, bed_nights } } zurück.
+// Arbeitet ausschließlich mit UTC-Datumsteilen, um Timezone-Probleme zu vermeiden.
+function distributeBookingByMonth(b) {
+  const result = {};
+  if (!b.checkin_date || !b.checkout_date) return result;
+
+  // Parse als UTC-Datumskomponenten (YYYY-MM-DD)
+  const parseUTC = (s) => {
+    const [y, m, d] = s.slice(0, 10).split('-').map(Number);
+    return Date.UTC(y, m - 1, d);
+  };
+  const checkinMs  = parseUTC(b.checkin_date);
+  const checkoutMs = parseUTC(b.checkout_date);
+  const totalNights = b.nights > 0 ? b.nights
+    : Math.max(1, Math.round((checkoutMs - checkinMs) / 86400000));
+  const dailyRate = b.daily_rate > 0 ? b.daily_rate
+    : (totalNights > 0 ? parseFloat(b.total_price || 0) / totalNights : 0);
+
+  // Segmente über Monatsgrenzen hinweg sammeln – alles UTC
+  const segments = [];
+  let cursorMs = checkinMs;
+  while (cursorMs < checkoutMs) {
+    const d = new Date(cursorMs);
+    const y = d.getUTCFullYear(), m = d.getUTCMonth();
+    const monthKey  = `${y}-${String(m + 1).padStart(2, '0')}`;
+    const nextMonMs = Date.UTC(y, m + 1, 1);          // Erster Tag des nächsten Monats (UTC)
+    const segEndMs  = nextMonMs < checkoutMs ? nextMonMs : checkoutMs;
+    const nights    = Math.round((segEndMs - cursorMs) / 86400000);
+    if (nights > 0) segments.push({ month: monthKey, nights });
+    cursorMs = nextMonMs;
+  }
+
+  // Umsatz proportional verteilen; letztes Segment bekommt Rundungsdifferenz
+  let assignedRevenue = 0, assignedNights = 0;
+  segments.forEach((seg, i) => {
+    const isLast = i === segments.length - 1;
+    const rev = isLast
+      ? parseFloat((parseFloat(b.total_price || 0) - assignedRevenue).toFixed(2))
+      : parseFloat((seg.nights * dailyRate).toFixed(2));
+    const n = isLast ? totalNights - assignedNights : seg.nights;
+    if (!result[seg.month]) result[seg.month] = { nights: 0, revenue: 0, bed_nights: 0 };
+    result[seg.month].nights    += n;
+    result[seg.month].revenue   += rev;
+    result[seg.month].bed_nights += seg.nights * (b.guest_count || 0);
+    assignedRevenue += rev;
+    assignedNights  += n;
+  });
+  return result;
+}
+
 export function calcMonthly(from, to, houseId) {
-  const filtered = filterBookings(BOOKINGS, from, to, houseId);
-  const houses = houseId ? HOUSES.filter(h => h.id === parseInt(houseId)) : HOUSES;
+  // Für die monatliche Verteilung verwenden wir ALLE Buchungen, deren Aufenthalt
+  // den angefragten Zeitraum berührt (nicht nur Checkin innerhalb des Zeitraums).
+  const hid = houseId ? parseInt(houseId) : null;
+  const houses = hid ? HOUSES.filter(h => h.id === hid) : HOUSES;
   const totalCap = houses.reduce((s, h) => s + h.capacity, 0);
   const byMonth = {};
-  filtered.filter(active).forEach(b => {
-    const m = b.checkin_date.slice(0, 7);
+
+  const ensureMonth = (m) => {
     if (!byMonth[m]) byMonth[m] = {
       month: m, bookings: 0, booked_nights: 0, bed_nights: 0, revenue: 0,
       adr_vals: [], booking_ids: [], house_booked_nights: {},
       revenue_per_house: {}, bed_nights_per_house: {}, lead_times: [], los_vals: [],
     };
-    byMonth[m].bookings++;
-    byMonth[m].booked_nights += b.nights;
-    byMonth[m].bed_nights += b.guest_count * b.nights;
-    byMonth[m].revenue += parseFloat(b.total_price);
-    if (b.daily_rate > 0) byMonth[m].adr_vals.push(b.daily_rate);
-    byMonth[m].booking_ids.push(b.id);
-    byMonth[m].house_booked_nights[b.house_id] = (byMonth[m].house_booked_nights[b.house_id] || 0) + b.nights;
-    byMonth[m].revenue_per_house[b.house_id] = (byMonth[m].revenue_per_house[b.house_id] || 0) + parseFloat(b.total_price);
-    byMonth[m].bed_nights_per_house[b.house_id] = (byMonth[m].bed_nights_per_house[b.house_id] || 0) + b.guest_count * b.nights;
+  };
+
+  BOOKINGS.filter(b => {
+    if (!active(b)) return false;
+    if (hid && b.house_id !== hid) return false;
+    // Buchung berührt den Zeitraum wenn Checkout > from UND Checkin < to
+    if (from && b.checkout_date <= from) return false;
+    if (to   && b.checkin_date  >  to)   return false;
+    return true;
+  }).forEach(b => {
+    const checkinMonth = b.checkin_date.slice(0, 7);
+    ensureMonth(checkinMonth);
+    // Buchungs-Ereignis-Metriken nur im Anreise-Monat zählen
+    byMonth[checkinMonth].bookings++;
+    byMonth[checkinMonth].booking_ids.push(b.id);
+    if (b.daily_rate > 0) byMonth[checkinMonth].adr_vals.push(b.daily_rate);
     const lt = Math.max(0, Math.ceil((new Date(b.checkin_date) - new Date(b.booking_date)) / 86400000));
-    byMonth[m].lead_times.push(lt);
-    byMonth[m].los_vals.push(b.nights);
+    byMonth[checkinMonth].lead_times.push(lt);
+    byMonth[checkinMonth].los_vals.push(b.nights);
+
+    // Umsatz, Nächte und Belegung auf die tatsächlichen Aufenthaltsmonate verteilen
+    const dist = distributeBookingByMonth(b);
+    Object.entries(dist).forEach(([m, seg]) => {
+      // Nur Monate innerhalb des angefragten Zeitraums ausgeben
+      if (from && m < from.slice(0, 7)) return;
+      if (to   && m > to.slice(0, 7))   return;
+      ensureMonth(m);
+      byMonth[m].revenue      += seg.revenue;
+      byMonth[m].booked_nights += seg.nights;
+      byMonth[m].bed_nights   += seg.bed_nights;
+      byMonth[m].house_booked_nights[b.house_id] = (byMonth[m].house_booked_nights[b.house_id] || 0) + seg.nights;
+      byMonth[m].revenue_per_house[b.house_id]   = (byMonth[m].revenue_per_house[b.house_id]   || 0) + seg.revenue;
+      byMonth[m].bed_nights_per_house[b.house_id] = (byMonth[m].bed_nights_per_house[b.house_id] || 0) + seg.bed_nights;
+    });
   });
   return Object.values(byMonth).sort((a, b) => a.month.localeCompare(b.month)).map(r => {
     const daysInMonth = new Date(r.month.slice(0,4), parseInt(r.month.slice(5,7)), 0).getDate();
