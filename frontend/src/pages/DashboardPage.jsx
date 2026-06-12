@@ -176,7 +176,29 @@ export default function DashboardPage() {
     setImporting(true);
     setImportMsg(null);
     api.post('/admin/lodgify-sync')
-      .then(r => setImportMsg({ ok: true, text: r.data?.message || 'Import abgeschlossen' }))
+      .then(r => {
+        const d = r.data || {};
+        setImportMsg({ ok: true, text: d.message || 'Import abgeschlossen' });
+        // Daten neu laden damit Dashboard aktualisiert wird
+        setLoading(true);
+        Promise.all([
+          api.get('/reports/kpis',              { params: { from, to } }),
+          api.get('/reports/occupancy-monthly', { params: { from, to } }),
+          api.get('/reports/houses',            { params: { from, to } }),
+        ]).then(([k, m, h]) => {
+          setKpis(k.data);
+          const currentMonthStr2 = `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}`;
+          setMonthly(m.data.map(r2 => {
+            const monthStr = r2.month?.slice(0,7);
+            const flat = { ...r2, monthLabel: MONTH_NAMES[parseInt(r2.month.slice(5,7))-1], isPast: monthStr < currentMonthStr2, isCurrent: monthStr === currentMonthStr2, isFuture: monthStr > currentMonthStr2 };
+            ['revenue_per_house','occupancy_per_house','revpar_per_house'].forEach(key => {
+              if (r2[key]) Object.entries(r2[key]).forEach(([hid, val]) => { flat[`${key === 'revenue_per_house' ? 'rev' : key === 'occupancy_per_house' ? 'occ' : 'revpar'}_h${hid}`] = val; });
+            });
+            return flat;
+          }));
+          setHouseData(h.data);
+        }).finally(() => setLoading(false));
+      })
       .catch(() => setImportMsg({ ok: false, text: 'Import fehlgeschlagen' }))
       .finally(() => setImporting(false));
   };
