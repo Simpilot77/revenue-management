@@ -238,21 +238,33 @@ export default function SettingsPage() {
           </p>
           <div className="grid sm:grid-cols-2 gap-4">
             <Field label="Lodgify API Key">
-              <div className="relative">
+              <div className="flex gap-2">
                 <input
-                  className="form-input w-full font-mono text-sm pr-16"
+                  className="form-input flex-1 font-mono text-sm"
                   type="text"
-                  placeholder="Hier reinziehen oder einfügen (Cmd+V)"
+                  placeholder="API-Schlüssel eingeben oder einfügen"
                   value={settings.lodgify_api_key || ''}
                   onChange={e => set('lodgify_api_key', e.target.value)}
-                  onDrop={e => { e.preventDefault(); set('lodgify_api_key', e.dataTransfer.getData('text')); }}
+                  onDrop={e => { e.preventDefault(); set('lodgify_api_key', e.dataTransfer.getData('text').trim()); }}
                   onDragOver={e => e.preventDefault()}
                 />
+                <button
+                  type="button"
+                  className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg whitespace-nowrap"
+                  onClick={async () => {
+                    try {
+                      const text = await navigator.clipboard.readText();
+                      if (text.trim()) set('lodgify_api_key', text.trim());
+                    } catch (_) {
+                      alert('Clipboard-Zugriff verweigert. Bitte Cmd+V / Strg+V direkt im Feld verwenden.');
+                    }
+                  }}
+                >📋 Einfügen</button>
                 {settings.lodgify_api_key && (
                   <button
                     type="button"
                     onClick={() => set('lodgify_api_key', '')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-red-400 hover:text-red-600 px-1"
+                    className="px-3 py-2 bg-red-100 hover:bg-red-200 text-red-600 text-xs rounded-lg"
                     title="Löschen"
                   >✕</button>
                 )}
