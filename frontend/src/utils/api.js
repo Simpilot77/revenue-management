@@ -10,11 +10,29 @@ import { runLodgifySync, ENV_API_KEY, ENV_HOUSE_MAP } from './lodgifyClient';
 let _customers = [...CUSTOMERS];
 
 // ── Buchungen aus letztem Lodgify-Import laden (überschreibt Mock-Daten) ─────
+function enrichBookings(list) {
+  const PORTAL_IDS = new Set([2, 3, 4, 5, 7]);
+  list.forEach(b => {
+    if (PORTAL_IDS.has(b.channel_id)) b.payment_status = b.payment_status ?? 'bezahlt';
+    b.commission_rate      = b.commission_rate      ?? (PORTAL_IDS.has(b.channel_id) ? 15 : 0);
+    b.commission_amount    = b.commission_overridden ? b.commission_amount
+                              : +(((b.commission_rate ?? 0) / 100) * (b.total_price ?? 0)).toFixed(2);
+    b.commission_overridden = b.commission_overridden ?? false;
+    b.deposit_taken        = b.deposit_taken        ?? false;
+    b.deposit_returned     = b.deposit_returned     ?? false;
+    b.invoice_sent         = b.invoice_sent         ?? false;
+    b.guests_registered    = b.guests_registered    ?? false;
+    b.included_in_stats    = b.included_in_stats    ?? !b.is_owner_block;
+  });
+  return list;
+}
+
 try {
   const saved = localStorage.getItem('lodgify_bookings');
   if (saved) {
     const parsed = JSON.parse(saved);
     if (Array.isArray(parsed) && parsed.length > 0) {
+      enrichBookings(parsed);
       BOOKINGS.splice(0, BOOKINGS.length, ...parsed);
     }
   }
@@ -274,6 +292,7 @@ api.interceptors.request.use((config) => {
           const syncData = JSON.parse(text);
           const incoming = Array.isArray(syncData.bookings) ? syncData.bookings : [];
           if (!incoming.length) throw new Error('sync.json enthält keine Buchungen');
+          enrichBookings(incoming);
           BOOKINGS.splice(0, BOOKINGS.length, ...incoming);
           try { localStorage.setItem('lodgify_bookings', JSON.stringify(incoming)); } catch (_) {}
           const reservations = incoming.filter(b => !b.is_owner_block);
@@ -310,6 +329,7 @@ api.interceptors.request.use((config) => {
 
     return runLodgifySync(apiKey, houseMapRaw)
       .then(result => {
+        enrichBookings(result.bookings);
         BOOKINGS.splice(0, BOOKINGS.length, ...result.bookings);
         try { localStorage.setItem('lodgify_bookings', JSON.stringify(result.bookings)); } catch (_) {}
         const syncedAt = new Date(result.syncedAt).toLocaleString('de-DE');
