@@ -69,6 +69,7 @@ function DrillDownModal({ title, bookingIds, onClose }) {
 import {
   exportMonthlyReport, exportHouseComparison, exportChannelReport,
   exportPickupReport, exportLeadTimeReport, exportYoYReport, exportForecast,
+  exportBookingsOverview,
 } from '../utils/pdfExport';
 
 const TAB_LABELS = ['Monatlich', 'Häuservergleich', 'Channel-Mix', 'Pickup', 'Vorlaufzeit', 'Jahresvergleich', 'Forecast', 'Buchungsübersicht'];
@@ -137,6 +138,10 @@ export default function ReportsPage() {
   const chartRef = useRef(null);
 
   const handlePdfExport = async () => {
+    if (tab === 7) {
+      await exportBookingsOverview(bookingsDetail, channels, year);
+      return;
+    }
     if (!tabData) return;
     // Capture the visible chart/content area as an image
     let chartImg = null;

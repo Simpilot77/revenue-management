@@ -2,7 +2,7 @@ import axios from 'axios';
 import {
   HOUSES, CHANNELS, BOOKINGS, CUSTOMERS,
   calcKpis, calcMonthly, calcChannels, calcPickup,
-  calcLeadTime, calcYoY, calcForecast, calcHouses, calcGuestDistribution,
+  calcLeadTime, calcYoY, calcForecast, calcHouses, calcGuestDistribution, calcCashflow,
 } from './mockData';
 import { runLodgifySync, ENV_API_KEY, ENV_HOUSE_MAP } from './lodgifyClient';
 
@@ -199,6 +199,7 @@ api.interceptors.request.use((config) => {
   // Reports
   else if (url === 'reports/kpis')              data = calcKpis(from, to, houseId);
   else if (url === 'reports/occupancy-monthly') data = calcMonthly(from, to, houseId);
+  else if (url === 'reports/cashflow')          data = calcCashflow(from, to, houseId);
   else if (url === 'reports/channels')          data = calcChannels(from, to, houseId);
   else if (url === 'reports/pickup')            data = calcPickup(from, to, houseId);
   else if (url === 'reports/lead-time')         data = calcLeadTime(from, to, houseId);

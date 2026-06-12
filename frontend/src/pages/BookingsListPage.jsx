@@ -28,7 +28,7 @@ function SortIcon({ dir }) {
 }
 
 // ─── Inline-editable cell ────────────────────────────────────────────────────
-function EditableCell({ booking, col, editingCell, onStartEdit, onChangeEdit, onSaveEdit, onCancelEdit }) {
+function EditableCell({ booking, col, editingCell, onStartEdit, onChangeEdit, onSaveEdit, onCancelEdit, isDuplicate }) {
   const inputRef = useRef(null);
   const isEditing = editingCell?.id === booking.id && editingCell?.field === col.key;
 
@@ -58,9 +58,18 @@ function EditableCell({ booking, col, editingCell, onStartEdit, onChangeEdit, on
     } else if (col.key === 'total_price') {
       display = <span className="font-medium whitespace-nowrap">{formatCurrency(booking[col.key])}</span>;
     } else if (col.key === 'invoice_number') {
-      display = booking[col.key]
-        ? <span className="font-mono text-xs text-gray-600">{booking[col.key]}</span>
-        : <span className="text-amber-500 text-xs">⚠ fehlt</span>;
+      if (isDuplicate && booking[col.key]) {
+        display = (
+          <span className="flex items-center gap-1">
+            <span className="font-mono text-xs text-red-700 font-semibold">{booking[col.key]}</span>
+            <span className="text-xs text-red-600 font-bold" title="Doppelte Rechnungsnummer!">⚠ doppelt</span>
+          </span>
+        );
+      } else {
+        display = booking[col.key]
+          ? <span className="font-mono text-xs text-gray-600">{booking[col.key]}</span>
+          : <span className="text-amber-500 text-xs">⚠ fehlt</span>;
+      }
     } else if (col.key === 'status') {
       display = <span className={`badge ${STATUS_COLORS[booking[col.key]]}`}>{STATUS_LABELS[booking[col.key]]}</span>;
     } else if (col.key === 'payment_status') {
@@ -136,10 +145,36 @@ function EditableCell({ booking, col, editingCell, onStartEdit, onChangeEdit, on
   );
 }
 
+// ─── Invoice number helpers ──────────────────────────────────────────────────
+
+/** Build the house prefix for invoice numbers: "15a", "15b", etc. */
+function invoiceHousePrefix(booking) {
+  const letter = (booking.house_short || '').toLowerCase() || String(booking.house_id || '');
+  return `15${letter}`;
+}
+
+/** Suggest the next invoice number for a booking based on existing numbers */
+function suggestInvoiceNumber(booking, allBookings) {
+  const year = new Date().getFullYear();
+  const prefix = invoiceHousePrefix(booking);
+  const key = `${prefix}-${year}`;
+  let max = 0;
+  allBookings.forEach(b => {
+    if (!b.invoice_number || b.id === booking.id) return;
+    const parts = b.invoice_number.split('-');
+    if (parts.length >= 3 && `${parts[0]}-${parts[1]}` === key) {
+      const n = parseInt(parts[2]);
+      if (!isNaN(n) && n > max) max = n;
+    }
+  });
+  return `${key}-${String(max + 1).padStart(4, '0')}`;
+}
+
 // ─── Main component ──────────────────────────────────────────────────────────
 export default function BookingsListPage() {
   const navigate = useNavigate();
   const [bookings, setBookings] = useState([]);
+  const [allBookings, setAllBookings] = useState([]); // full set for invoice logic
   const [total, setTotal] = useState(0);
   const [houses, setHouses] = useState([]);
   const [channels, setChannels] = useState([]);
@@ -149,43 +184,69 @@ export default function BookingsListPage() {
   const [sortField, setSortField] = useState('checkin_date');
   const [sortDir, setSortDir] = useState('desc');
   const [gapWarnings, setGapWarnings] = useState([]);
+  const [duplicateInvoices, setDuplicateInvoices] = useState(new Set()); // booking ids with duplicate invoice numbers
   const [invoiceLang, setInvoiceLang] = useState('de');
   const [editingCell, setEditingCell] = useState(null); // { id, field, value }
+  const [dupConfirm, setDupConfirm] = useState(null); // { booking, newValue, existingIds }
   const limit = 25;
+
+  const refreshInvoiceAnalysis = useCallback((all) => {
+    const byHouseYear = {};
+    const invoiceMap = {}; // invoice_number → [booking_ids]
+    const activeAll = all.filter(b => ['bestaetigt','eingecheckt','ausgecheckt'].includes(b.status));
+
+    activeAll.forEach(b => {
+      if (!b.invoice_number) return;
+      const inv = b.invoice_number.trim();
+      if (!invoiceMap[inv]) invoiceMap[inv] = [];
+      invoiceMap[inv].push(b.id);
+
+      const parts = inv.split('-');
+      if (parts.length >= 3) {
+        const key = `${parts[0]}-${parts[1]}`;
+        const num = parseInt(parts[2]);
+        if (!isNaN(num)) {
+          if (!byHouseYear[key]) byHouseYear[key] = [];
+          byHouseYear[key].push(num);
+        }
+      }
+    });
+
+    // Gap warnings
+    const warnings = [];
+    Object.entries(byHouseYear).forEach(([key, nums]) => {
+      const sorted = [...nums].sort((a, b) => a - b);
+      const gaps = [];
+      for (let i = sorted[0]; i <= sorted[sorted.length - 1]; i++) {
+        if (!sorted.includes(i)) gaps.push(i);
+      }
+      if (gaps.length) warnings.push(`${key}: fehlende Nr. ${gaps.map(n => String(n).padStart(4,'0')).join(', ')}`);
+    });
+    setGapWarnings(warnings);
+
+    // Duplicate set
+    const dupeIds = new Set();
+    Object.values(invoiceMap).forEach(ids => {
+      if (ids.length > 1) ids.forEach(id => dupeIds.add(id));
+    });
+    setDuplicateInvoices(dupeIds);
+  }, []);
+
+  const loadAllBookings = useCallback(() => {
+    api.get('/bookings', { params: { limit: 500 } }).then(r => {
+      const all = r.data.data || [];
+      setAllBookings(all);
+      refreshInvoiceAnalysis(all);
+    });
+  }, [refreshInvoiceAnalysis]);
 
   useEffect(() => {
     Promise.all([api.get('/meta/houses'), api.get('/meta/channels')]).then(([h, c]) => {
       setHouses(h.data);
       setChannels(c.data);
     });
-    // Load all bookings for gap detection
-    api.get('/bookings', { params: { limit: 500 } }).then(r => {
-      const all = (r.data.data || []).filter(b => ['bestaetigt','eingecheckt','ausgecheckt'].includes(b.status));
-      const byHouseYear = {};
-      all.forEach(b => {
-        if (!b.invoice_number) return;
-        const parts = b.invoice_number.split('-');
-        if (parts.length < 3) return;
-        const key = `${parts[0]}-${parts[1]}`;
-        const num = parseInt(parts[2]);
-        if (isNaN(num)) return;
-        if (!byHouseYear[key]) byHouseYear[key] = [];
-        byHouseYear[key].push(num);
-      });
-      const warnings = [];
-      Object.entries(byHouseYear).forEach(([key, nums]) => {
-        const sorted = [...nums].sort((a, b) => a - b);
-        const gaps = [];
-        for (let i = sorted[0]; i <= sorted[sorted.length - 1]; i++) {
-          if (!sorted.includes(i)) gaps.push(i);
-        }
-        if (gaps.length) {
-          warnings.push(`${key}: fehlende Nr. ${gaps.map(n => String(n).padStart(4,'0')).join(', ')}`);
-        }
-      });
-      setGapWarnings(warnings);
-    });
-  }, []);
+    loadAllBookings();
+  }, [loadAllBookings]);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -236,6 +297,7 @@ export default function BookingsListPage() {
     if (!confirm(`Buchung von "${name}" wirklich löschen?`)) return;
     await api.delete(`/bookings/${id}`);
     load();
+    loadAllBookings();
   };
 
   const handleToggleStats = async (b) => {
@@ -246,34 +308,66 @@ export default function BookingsListPage() {
 
   // ── Inline cell editing ──
   const startEdit = (id, field, value) => {
-    setEditingCell({ id, field, value: value ?? '' });
+    let prefill = value ?? '';
+    // Pre-fill invoice number if empty
+    if (field === 'invoice_number' && !prefill) {
+      const booking = bookings.find(b => b.id === id) || allBookings.find(b => b.id === id);
+      if (booking) prefill = suggestInvoiceNumber(booking, allBookings);
+    }
+    setEditingCell({ id, field, value: prefill });
   };
 
   const changeEdit = (value) => {
     setEditingCell(prev => prev ? { ...prev, value } : null);
   };
 
+  const doSaveEdit = async (id, field, val) => {
+    const booking = bookings.find(b => b.id === id) || allBookings.find(b => b.id === id);
+    if (!booking) return;
+    const updated = { ...booking, [field]: val };
+    setBookings(prev => prev.map(b => b.id === updated.id ? updated : b));
+    setAllBookings(prev => prev.map(b => b.id === updated.id ? updated : b));
+    try {
+      await api.put(`/bookings/${id}`, updated);
+      // Refresh invoice analysis after save
+      const freshAll = allBookings.map(b => b.id === updated.id ? updated : b);
+      refreshInvoiceAnalysis(freshAll);
+    } catch {
+      load();
+      loadAllBookings();
+    }
+  };
+
   const saveEdit = async () => {
     if (!editingCell) return;
-    const booking = bookings.find(b => b.id === editingCell.id);
-    if (!booking) { setEditingCell(null); return; }
 
-    // Cast value to correct type
     let val = editingCell.value;
     const col = COLUMNS.find(c => c.key === editingCell.field);
     if (col?.type === 'number') val = parseFloat(val) || 0;
 
-    const updated = { ...booking, [editingCell.field]: val };
     setEditingCell(null);
 
-    // Optimistic update
-    setBookings(prev => prev.map(b => b.id === updated.id ? updated : b));
-
-    try {
-      await api.put(`/bookings/${editingCell.id}`, updated);
-    } catch {
-      load(); // revert on error
+    // Check for duplicate invoice numbers
+    if (editingCell.field === 'invoice_number' && val) {
+      const inv = String(val).trim();
+      const existingIds = allBookings
+        .filter(b => b.id !== editingCell.id && b.invoice_number?.trim() === inv && ['bestaetigt','eingecheckt','ausgecheckt'].includes(b.status))
+        .map(b => b.id);
+      if (existingIds.length > 0) {
+        const existing = allBookings.find(b => b.id === existingIds[0]);
+        setDupConfirm({
+          bookingId: editingCell.id,
+          field: editingCell.field,
+          value: inv,
+          existingGuest: existing?.guest_name || '—',
+          existingHouse: existing?.house_short || '—',
+          existingDate: existing?.checkin_date?.slice(0,10) || '—',
+        });
+        return; // wait for user confirmation
+      }
     }
+
+    await doSaveEdit(editingCell.id, editingCell.field, val);
   };
 
   const cancelEdit = () => setEditingCell(null);
@@ -302,6 +396,14 @@ export default function BookingsListPage() {
         <span>Zelleninhalt anklicken zum direkten Bearbeiten — Enter zum Speichern, Escape zum Abbrechen</span>
       </div>
 
+      {duplicateInvoices.size > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-800 space-y-1">
+          <div className="font-semibold">🚨 Doppelte Rechnungsnummern erkannt</div>
+          <div className="text-xs">
+            {duplicateInvoices.size} Buchungen haben eine doppelt vergebene Rechnungsnummer (rot markiert). Bitte korrigieren.
+          </div>
+        </div>
+      )}
       {gapWarnings.length > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800 space-y-1">
           <div className="font-semibold">⚠️ Lücken in den Rechnungsnummern erkannt</div>
@@ -361,7 +463,7 @@ export default function BookingsListPage() {
               ) : sortedBookings.map((b, idx) => (
                 <tr
                   key={b.id}
-                  className={`hover:bg-gray-50 ${editingCell?.id === b.id ? 'bg-blue-50/40' : ''}`}
+                  className={`hover:bg-gray-50 ${editingCell?.id === b.id ? 'bg-blue-50/40' : ''} ${duplicateInvoices.has(b.id) ? 'bg-red-50/60' : ''}`}
                 >
                   {/* Row number */}
                   <td className="px-3 py-2 text-center text-xs text-gray-400 font-mono select-none">
@@ -402,6 +504,7 @@ export default function BookingsListPage() {
                       onChangeEdit={changeEdit}
                       onSaveEdit={saveEdit}
                       onCancelEdit={cancelEdit}
+                      isDuplicate={col.key === 'invoice_number' && duplicateInvoices.has(b.id)}
                     />
                   ))}
                 </tr>
@@ -420,6 +523,56 @@ export default function BookingsListPage() {
           </div>
         )}
       </div>
+
+      {/* Duplicate invoice confirmation modal */}
+      {dupConfirm && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}
+          onClick={() => setDupConfirm(null)}
+        >
+          <div
+            className="card"
+            style={{ minWidth: '360px', maxWidth: '460px', padding: '28px' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3 mb-4">
+              <span className="text-2xl">🚨</span>
+              <div>
+                <h3 className="font-bold text-gray-900 text-base">Doppelte Rechnungsnummer</h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Die Rechnungsnummer <span className="font-mono font-bold text-red-700">{dupConfirm.value}</span> ist bereits vergeben:
+                </p>
+                <div className="mt-2 bg-red-50 border border-red-100 rounded-lg px-3 py-2 text-xs text-red-800">
+                  <span className="font-semibold">{dupConfirm.existingGuest}</span>
+                  {' · '}Haus {dupConfirm.existingHouse}
+                  {' · '}Anreise {dupConfirm.existingDate}
+                </div>
+                <p className="text-sm text-gray-500 mt-3">
+                  Möchtest du die Nummer trotzdem übernehmen? Beide Einträge werden dann als „doppelt" markiert, bis du es korrigierst.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button
+                className="btn-secondary text-sm"
+                onClick={() => setDupConfirm(null)}
+              >
+                Abbrechen
+              </button>
+              <button
+                className="text-sm px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium transition-colors"
+                onClick={async () => {
+                  const conf = dupConfirm;
+                  setDupConfirm(null);
+                  await doSaveEdit(conf.bookingId, conf.field, conf.value);
+                }}
+              >
+                Trotzdem speichern
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -613,8 +613,10 @@ export function calcKpis(from, to, houseId) {
   const houses = houseId ? HOUSES.filter(h => h.id === parseInt(houseId)) : HOUSES;
   const totalCap = houses.reduce((s, h) => s + h.capacity, 0);
   const availableBedNights = totalCap * days;
+  // House-based occupancy: available house-nights = number of houses × days
+  const availableHouseNights = houses.length * days;
   const totalRevenue = activeB.reduce((s, b) => s + parseFloat(b.total_price), 0);
-  const totalNights = activeB.reduce((s, b) => s + b.nights, 0);
+  const totalNights = activeB.reduce((s, b) => s + b.nights, 0);  // house-nights booked
   const bedNights = activeB.reduce((s, b) => s + b.guest_count * b.nights, 0);
   const adrVals = activeB.filter(b => b.daily_rate > 0).map(b => b.daily_rate);
   const adr = adrVals.length ? adrVals.reduce((s, v) => s + v, 0) / adrVals.length : 0;
@@ -629,9 +631,10 @@ export function calcKpis(from, to, houseId) {
     total_bookings: filtered.length, confirmed_bookings: activeB.length,
     total_revenue: totalRevenue, total_nights: totalNights,
     occupied_bed_nights: bedNights, available_bed_nights: availableBedNights,
-    occupancy_rate: availableBedNights > 0 ? parseFloat(((bedNights / availableBedNights) * 100).toFixed(1)) : 0,
+    // Occupancy = house-nights booked / house-nights available (a booked house = 100% occupied that night)
+    occupancy_rate: availableHouseNights > 0 ? parseFloat(((totalNights / availableHouseNights) * 100).toFixed(1)) : 0,
     revpar: availableBedNights > 0 ? parseFloat((totalRevenue / availableBedNights).toFixed(2)) : 0,
-    revpar_house: days > 0 ? parseFloat((totalRevenue / (HOUSES.length * days)).toFixed(2)) : 0,
+    revpar_house: days > 0 ? parseFloat((totalRevenue / (houses.length * days)).toFixed(2)) : 0,
     adr: parseFloat(adr.toFixed(2)), avg_los: parseFloat(avgLos.toFixed(1)),
     avg_lead_time: Math.round(avgLeadTime), cancellations, no_shows: noShows,
     returning_guests: returning,
@@ -752,12 +755,11 @@ export function calcMonthly(from, to, houseId) {
     });
     const avgLeadTime = r.lead_times.length ? r.lead_times.reduce((s,v)=>s+v,0)/r.lead_times.length : 0;
     const avgLos = r.los_vals.length ? r.los_vals.reduce((s,v)=>s+v,0)/r.los_vals.length : 0;
-    // Per-house occupancy rate
+    // Per-house occupancy rate: booked house-nights / total house-nights in month
     const occupancy_per_house = {};
     houses.forEach(h => {
-      const bn = r.bed_nights_per_house[h.id] || 0;
-      const cap = h.capacity * daysInMonth;
-      occupancy_per_house[h.id] = cap > 0 ? parseFloat(((bn / cap) * 100).toFixed(1)) : 0;
+      const hn = r.house_booked_nights[h.id] || 0;
+      occupancy_per_house[h.id] = daysInMonth > 0 ? parseFloat(((hn / daysInMonth) * 100).toFixed(1)) : 0;
     });
     return {
       ...r,
@@ -767,7 +769,8 @@ export function calcMonthly(from, to, houseId) {
       available_bed_nights: avail, available_house_nights: availHouseNights,
       free_nights: Math.max(0, availHouseNights - r.booked_nights),
       house_free_nights, occupancy_per_house,
-      occupancy_rate: avail > 0 ? parseFloat(((r.bed_nights/avail)*100).toFixed(1)) : 0,
+      // Occupancy = house-nights booked / house-nights available (not bed-nights!)
+      occupancy_rate: availHouseNights > 0 ? parseFloat(((r.booked_nights / availHouseNights) * 100).toFixed(1)) : 0,
       // RevPAR per whole house (standard: revenue / available house-nights)
       revpar_house: availHouseNights > 0 ? parseFloat((r.revenue / availHouseNights).toFixed(2)) : 0,
       // RevPAR per bed (legacy / additional info)
@@ -856,13 +859,22 @@ export function calcForecast(houseId) {
   const byMonth = {};
   filtered.forEach(b => {
     const m = b.checkin_date.slice(0,7);
-    if (!byMonth[m]) byMonth[m] = { month: m, bookings:0, bed_nights_booked:0, revenue:0 };
-    byMonth[m].bookings++; byMonth[m].bed_nights_booked += b.guest_count*b.nights; byMonth[m].revenue += parseFloat(b.total_price);
+    if (!byMonth[m]) byMonth[m] = { month: m, bookings:0, bed_nights_booked:0, house_nights_booked:0, revenue:0 };
+    byMonth[m].bookings++;
+    byMonth[m].bed_nights_booked += b.guest_count * b.nights;
+    byMonth[m].house_nights_booked += b.nights;
+    byMonth[m].revenue += parseFloat(b.total_price);
   });
   return Object.values(byMonth).map(r => {
     const dim = new Date(r.month.slice(0,4), parseInt(r.month.slice(5,7)), 0).getDate();
-    const avail = cap * dim;
-    return { ...r, available_bed_nights: avail, occupancy_rate: avail>0 ? parseFloat(((r.bed_nights_booked/avail)*100).toFixed(1)) : 0 };
+    const availBed   = cap * dim;
+    const availHouse = houses.length * dim;
+    return {
+      ...r,
+      available_bed_nights: availBed,
+      // House-based occupancy (consistent with dashboard and monthly reports)
+      occupancy_rate: availHouse > 0 ? parseFloat(((r.house_nights_booked / availHouse) * 100).toFixed(1)) : 0,
+    };
   });
 }
 
@@ -879,6 +891,34 @@ export function calcGuestDistribution(from, to, houseId) {
   return Object.values(dist).sort((a, b) => a.guest_count - b.guest_count);
 }
 
+// Cashflow: Umsatz gruppiert nach Buchungsdatum (wann die Zahlung einging)
+export function calcCashflow(from, to, houseId) {
+  const hid = houseId ? parseInt(houseId) : null;
+  const byMonth = {};
+  const ensureMonth = (m) => {
+    if (!byMonth[m]) byMonth[m] = { month: m, revenue: 0, bookings: 0, revenue_per_house: {} };
+  };
+  BOOKINGS.filter(b => {
+    if (!active(b)) return false;
+    if (hid && b.house_id !== hid) return false;
+    const bd = b.booking_date?.slice(0, 10);
+    if (!bd) return false;
+    if (from && bd < from) return false;
+    if (to   && bd > to)   return false;
+    return true;
+  }).forEach(b => {
+    const m = b.booking_date.slice(0, 7);
+    ensureMonth(m);
+    byMonth[m].revenue += parseFloat(b.total_price) || 0;
+    byMonth[m].bookings++;
+    byMonth[m].revenue_per_house[b.house_id] = (byMonth[m].revenue_per_house[b.house_id] || 0) + (parseFloat(b.total_price) || 0);
+  });
+  return Object.values(byMonth).sort((a, b) => a.month.localeCompare(b.month)).map(r => ({
+    ...r,
+    revenue: parseFloat(r.revenue.toFixed(2)),
+  }));
+}
+
 export function calcHouses(from, to) {
   const days = Math.max(1, Math.ceil((new Date(to)-new Date(from))/86400000));
   return HOUSES.map(h => {
@@ -888,8 +928,9 @@ export function calcHouses(from, to) {
     const cancellations = filterBookings(BOOKINGS, from, to, h.id).filter(b=>b.status==='storniert').length;
     const adrVals = bks.filter(b=>b.daily_rate>0).map(b=>b.daily_rate);
     const adr = adrVals.length ? adrVals.reduce((s,v)=>s+v,0)/adrVals.length : 0;
-    const avail = h.capacity * days;
+    const availBed   = h.capacity * days;
+    const availHouse = days; // one house: available nights = days in period
     const bedNights = bks.reduce((s,b)=>s+b.guest_count*b.nights,0);
-    return { id:h.id, name:h.name, short_name:h.short_name, capacity:h.capacity, bookings:bks.length, revenue, nights, adr:parseFloat(adr.toFixed(2)), cancellations, available_bed_nights:avail, occupancy_rate:avail>0?parseFloat(((bedNights/avail)*100).toFixed(1)):0, revpar:avail>0?parseFloat((revenue/avail).toFixed(2)):0 };
+    return { id:h.id, name:h.name, short_name:h.short_name, capacity:h.capacity, bookings:bks.length, revenue, nights, adr:parseFloat(adr.toFixed(2)), cancellations, available_bed_nights:availBed, occupancy_rate:availHouse>0?parseFloat(((nights/availHouse)*100).toFixed(1)):0, revpar:availBed>0?parseFloat((revenue/availBed).toFixed(2)):0 };
   });
 }

@@ -114,6 +114,7 @@ function KpiCard({ label, value, sub, color = 'blue', icon }) {
 export default function DashboardPage() {
   const [kpis, setKpis]         = useState(null);
   const [monthly, setMonthly]   = useState([]);
+  const [cashflow, setCashflow]  = useState([]);
   const [houseData, setHouseData] = useState([]);
   const [loading, setLoading]   = useState(true);
   const [importing, setImporting] = useState(false);
@@ -139,8 +140,13 @@ export default function DashboardPage() {
       api.get('/reports/kpis',              { params: { from, to } }),
       api.get('/reports/occupancy-monthly', { params: { from, to } }),
       api.get('/reports/houses',            { params: { from, to } }),
-    ]).then(([k, m, h]) => {
+      api.get('/reports/cashflow',          { params: { from, to } }),
+    ]).then(([k, m, h, cf]) => {
       setKpis(k.data);
+      setCashflow((cf.data || []).map(r => ({
+        ...r,
+        monthLabel: MONTH_NAMES[parseInt(r.month.slice(5, 7)) - 1],
+      })));
       // Flatten per-house maps so recharts can use simple dataKey strings
       setMonthly(m.data.map(r => {
         const monthStr = r.month?.slice(0, 7); // 'YYYY-MM'
@@ -436,6 +442,58 @@ export default function DashboardPage() {
               <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded" style={{background:'#f97316'}}></span> Vergangenheit</span>
               <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded border-2 border-orange-500" style={{background:'#fff'}}></span> Aktueller Monat</span>
               <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded" style={{background:'#fed7aa'}}></span> Zukunft</span>
+            </div>
+          </div>
+
+          {/* ── Cashflow chart ── */}
+          <div className="card">
+            <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
+              <div>
+                <h2 className="font-semibold text-gray-800">Cashflow — Umsatz nach Buchungsdatum</h2>
+                <p className="text-xs text-gray-400">Wann ist der Umsatz tatsächlich eingegangen (Buchungsdatum)</p>
+              </div>
+            </div>
+            <div className="flex gap-6 mb-3 text-xs flex-wrap">
+              {cashflow.reduce((s, r) => s + r.revenue, 0) > 0 && (
+                <span className="text-gray-500">
+                  Gesamt: <span className="font-semibold text-gray-800">{formatCurrency(cashflow.reduce((s, r) => s + r.revenue, 0))}</span>
+                  {' '}· <span className="text-gray-400">{cashflow.reduce((s, r) => s + r.bookings, 0)} Buchungen</span>
+                </span>
+              )}
+              <span className="text-gray-400 italic">Accrual-Umsatz (Aufenthalt) ist im Umsatz-Chart oben dargestellt</span>
+            </div>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={cashflow} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="monthLabel" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
+                <Tooltip
+                  formatter={(v, name) => name === 'Buchungen' ? v : formatCurrency(v)}
+                  labelStyle={{ fontWeight: 600 }}
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null;
+                    const d = payload[0]?.payload;
+                    return (
+                      <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-xs">
+                        <div className="font-semibold text-gray-800 mb-1">{label}</div>
+                        <div className="text-emerald-700 font-bold">{formatCurrency(d?.revenue || 0)}</div>
+                        <div className="text-gray-500">{d?.bookings || 0} Buchungen eingegangen</div>
+                      </div>
+                    );
+                  }}
+                />
+                <Bar dataKey="revenue" radius={[4,4,0,0]} name="Cashflow" fill="#059669">
+                  {cashflow.map((m, i) => {
+                    const ms = m.month?.slice(0,7);
+                    return <Cell key={i} fill={ms > currentMonthStr ? '#a7f3d0' : ms < currentMonthStr ? '#10b981' : '#059669'} />;
+                  })}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+            <div className="mt-2 flex gap-4 text-xs text-gray-400 flex-wrap">
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded" style={{background:'#10b981'}}></span> Vergangenheit</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded border-2 border-emerald-700" style={{background:'#fff'}}></span> Aktueller Monat</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded" style={{background:'#a7f3d0'}}></span> Zukunft</span>
             </div>
           </div>
 

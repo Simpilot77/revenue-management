@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../utils/api';
 import { formatCurrency } from '../utils/format';
+import { buildInvoicePreviewData } from '../utils/pdfExport';
+import InvoicePreviewModal from '../components/InvoicePreviewModal';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -55,8 +57,40 @@ function getTaskDueAuto(key, booking) {
 
 // ─── localStorage helpers ────────────────────────────────────────────────────
 
-const TASKS_KEY    = 'booking_tasks';
-const DUES_KEY     = 'booking_task_dues';
+const TASKS_KEY      = 'booking_tasks';
+const DUES_KEY       = 'booking_task_dues';
+const NOTES_KEY      = 'booking_task_notes';       // booking-level note
+const TASK_NOTES_KEY = 'booking_task_item_notes';  // per-task notes
+
+function loadAllNotes() {
+  try { return JSON.parse(localStorage.getItem(NOTES_KEY) || '{}'); } catch { return {}; }
+}
+function saveAllNotes(notes) {
+  localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+}
+function getBookingNote(bookingId) {
+  return loadAllNotes()[bookingId] || '';
+}
+function setBookingNote(bookingId, note) {
+  const all = loadAllNotes();
+  if (note) all[bookingId] = note;
+  else delete all[bookingId];
+  saveAllNotes(all);
+}
+
+function loadAllTaskNotes() {
+  try { return JSON.parse(localStorage.getItem(TASK_NOTES_KEY) || '{}'); } catch { return {}; }
+}
+function getTaskNote(bookingId, taskKey) {
+  return loadAllTaskNotes()[`${bookingId}__${taskKey}`] || '';
+}
+function setTaskNote(bookingId, taskKey, note) {
+  const all = loadAllTaskNotes();
+  const k = `${bookingId}__${taskKey}`;
+  if (note) all[k] = note;
+  else delete all[k];
+  localStorage.setItem(TASK_NOTES_KEY, JSON.stringify(all));
+}
 
 export function loadAllTasks() {
   try { return JSON.parse(localStorage.getItem(TASKS_KEY) || '{}'); } catch { return {}; }
@@ -361,12 +395,264 @@ function DueDateCell({ bookingId, taskKey, booking, isDone, onChanged }) {
   );
 }
 
+// ─── Task Timeline ────────────────────────────────────────────────────────────
+
+function TaskTimeline({ booking, tasks }) {
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Collect task dates for timeline range
+  const items = TASK_DEFS.map(t => ({
+    ...t,
+    isDone: !!tasks[t.key],
+    due: getEffectiveDue(t.key, booking),
+  }));
+
+  const dates = items.map(i => i.due).filter(Boolean).sort();
+  if (dates.length === 0) return null;
+
+  const minDate = dates[0];
+  const maxDate = dates[dates.length - 1];
+  const rangeMs = new Date(maxDate) - new Date(minDate) || 1;
+
+  const getPct = (d) => {
+    if (!d) return null;
+    const ms = new Date(d) - new Date(minDate);
+    return Math.max(0, Math.min(100, (ms / rangeMs) * 100));
+  };
+
+  const todayPct = getPct(today);
+
+  return (
+    <div className="mt-1">
+      <div className="text-xs font-medium text-gray-500 mb-2">📅 Aufgaben-Zeitstrahl</div>
+      <div className="relative" style={{ paddingBottom: '36px' }}>
+        {/* Base line */}
+        <div className="absolute left-0 right-0" style={{ top: '10px', height: '3px', backgroundColor: '#e5e7eb', borderRadius: '2px' }} />
+
+        {/* Today marker */}
+        {todayPct !== null && todayPct >= 0 && todayPct <= 100 && (
+          <div
+            className="absolute"
+            style={{ left: `${todayPct}%`, top: '2px', width: '2px', height: '18px', backgroundColor: '#3b82f6', transform: 'translateX(-50%)' }}
+          >
+            <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', fontSize: '0.55rem', color: '#3b82f6', fontWeight: 700, whiteSpace: 'nowrap' }}>Heute</div>
+          </div>
+        )}
+
+        {/* Task dots */}
+        {items.map((item, idx) => {
+          if (!item.due) return null;
+          const pct = getPct(item.due);
+          const isOverdue = !item.isDone && item.due < today;
+          const dotColor = item.isDone ? '#10b981' : isOverdue ? '#ef4444' : item.due === today ? '#f59e0b' : '#94a3b8';
+          // Stagger label rows to avoid overlap
+          const row = idx % 2;
+          return (
+            <div key={item.key} className="absolute" style={{ left: `${pct}%`, top: '4px', transform: 'translateX(-50%)' }}>
+              <div style={{
+                width: '14px', height: '14px', borderRadius: '50%',
+                backgroundColor: dotColor,
+                border: '2px solid white',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '7px',
+              }}>
+                {item.isDone ? '✓' : ''}
+              </div>
+              <div style={{
+                position: 'absolute',
+                top: row === 0 ? '18px' : '30px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                fontSize: '0.55rem',
+                color: dotColor,
+                fontWeight: 600,
+                whiteSpace: 'nowrap',
+                maxWidth: '60px',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                textAlign: 'center',
+              }}>
+                {item.icon}
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Progress fill */}
+        {todayPct !== null && (
+          <div
+            className="absolute left-0"
+            style={{
+              top: '10px',
+              width: `${Math.min(100, Math.max(0, todayPct))}%`,
+              height: '3px',
+              backgroundColor: '#3b82f6',
+              borderRadius: '2px',
+            }}
+          />
+        )}
+      </div>
+
+      {/* Compact legend */}
+      <div className="flex gap-3 text-xs text-gray-400 mt-1 flex-wrap">
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{background:'#10b981'}}></span>Erledigt</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{background:'#ef4444'}}></span>Überfällig</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{background:'#94a3b8'}}></span>Geplant</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Invoice prefix helper ────────────────────────────────────────────────────
+
+function invoicePrefix(booking) {
+  const letter = (booking.house_short || '').toLowerCase() || String(booking.house_id || '');
+  const year   = new Date().getFullYear();
+  return `15${letter}-${year}-`;
+}
+
+function parseInvoiceSuffix(fullNum, prefix) {
+  if (!fullNum) return '';
+  if (fullNum.startsWith(prefix)) return fullNum.slice(prefix.length);
+  // fallback: last segment after last dash
+  const parts = fullNum.split('-');
+  return parts[parts.length - 1] || '';
+}
+
+// ─── Single task row (with per-task note) ─────────────────────────────────────
+
+function TaskRow({ task, booking, tasks, today, invoiceNum, setInvoiceNum, onToggle, onRerender, onOpenInvoice }) {
+  const isDone    = !!tasks[task.key];
+  const dueDate   = getEffectiveDue(task.key, booking);
+  const isOverdue = !isDone && dueDate && dueDate < today;
+
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [taskNote, setTaskNoteState] = useState(() => getTaskNote(booking.id, task.key));
+
+  const prefix = invoicePrefix(booking);
+  const suffix = parseInvoiceSuffix(invoiceNum, prefix);
+
+  const handleSuffixChange = (val) => {
+    // Only digits, max 4 chars
+    const digits = val.replace(/\D/g, '').slice(0, 4);
+    const full = digits ? `${prefix}${digits.padStart(4, '0')}` : '';
+    setInvoiceNum(full);
+  };
+
+  const handleInvoiceBlur = () => {
+    const val = invoiceNum.trim();
+    api.put(`/bookings/${booking.id}`, { ...booking, invoice_number: val || null }).catch(() => {});
+  };
+
+  return (
+    <div
+      className={`rounded-xl ${isDone ? 'bg-emerald-50' : isOverdue ? 'bg-red-50' : 'bg-gray-50'}`}
+    >
+      {/* Main row */}
+      <div className="flex items-start gap-3 p-2.5">
+        <input
+          type="checkbox"
+          checked={isDone}
+          onChange={e => onToggle(e, task.key)}
+          className="w-4 h-4 accent-emerald-600 cursor-pointer shrink-0 mt-0.5"
+        />
+        <span className="text-base shrink-0 mt-0.5">{task.icon}</span>
+        <div className="flex-1 min-w-0">
+          <span className={`text-sm block ${isDone ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+            {task.label}
+          </span>
+
+          {/* Invoice number: static prefix + 4-digit input + create button */}
+          {task.key === 'invoice' && (
+            <div className="space-y-1.5 mt-1" onClick={e => e.stopPropagation()}>
+              {/* Number input row */}
+              <div className="flex items-center gap-1">
+                <span className="text-xs font-mono text-gray-500 select-none bg-gray-100 border border-gray-200 rounded-l px-1.5 py-0.5 border-r-0 whitespace-nowrap">
+                  {prefix}
+                </span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={suffix}
+                  placeholder="0001"
+                  className="text-xs border border-gray-200 rounded-r px-1.5 py-0.5 w-14 focus:outline-none focus:ring-1 focus:ring-blue-400 font-mono bg-white"
+                  onChange={e => handleSuffixChange(e.target.value)}
+                  onBlur={handleInvoiceBlur}
+                  onClick={e => e.stopPropagation()}
+                />
+              </div>
+              {/* Create invoice button */}
+              <button
+                type="button"
+                className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors shadow-sm"
+                onClick={e => { e.stopPropagation(); onOpenInvoice?.(); }}
+              >
+                🧾 Rechnung erstellen
+              </button>
+            </div>
+          )}
+
+          <DueDateCell
+            bookingId={booking.id}
+            taskKey={task.key}
+            booking={booking}
+            isDone={isDone}
+            onChanged={onRerender}
+          />
+        </div>
+
+        {/* Note toggle + status indicator */}
+        <div className="flex items-center gap-1 shrink-0 mt-0.5">
+          <button
+            className={`text-xs px-1.5 py-0.5 rounded transition-colors ${
+              noteOpen || taskNote
+                ? 'text-blue-600 bg-blue-50 hover:bg-blue-100'
+                : 'text-gray-300 hover:text-gray-500 hover:bg-gray-100'
+            }`}
+            title={noteOpen ? 'Notiz schließen' : 'Notiz hinzufügen'}
+            onClick={e => { e.stopPropagation(); setNoteOpen(o => !o); }}
+          >
+            {taskNote && !noteOpen ? '📝' : '✏️'}
+          </button>
+          {isDone && <span className="text-xs text-emerald-500 font-bold">✓</span>}
+          {isOverdue && <span className="text-xs text-red-500 font-bold">!</span>}
+        </div>
+      </div>
+
+      {/* Inline note area */}
+      {(noteOpen || taskNote) && (
+        <div className="px-2.5 pb-2.5" onClick={e => e.stopPropagation()}>
+          <textarea
+            value={taskNote}
+            placeholder="Notiz zu dieser Aufgabe…"
+            rows={2}
+            autoFocus={noteOpen && !taskNote}
+            className={`w-full text-xs border rounded-lg px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-blue-300
+              ${isDone ? 'bg-emerald-50/60 border-emerald-100' : isOverdue ? 'bg-red-50/60 border-red-100' : 'bg-white border-gray-200'}`}
+            onChange={e => {
+              const v = e.target.value;
+              setTaskNoteState(v);
+              setTaskNote(booking.id, task.key, v);
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Single Booking Task Card ─────────────────────────────────────────────────
 
 function BookingTaskCard({ booking, onTaskChange }) {
   const [tasks, setTasks] = useState(() => getBookingTasks(booking.id));
   const [expanded, setExpanded] = useState(false);
   const [, rerender] = useState(0);
+  const [note, setNote] = useState(() => getBookingNote(booking.id));
+  const [invoiceNum, setInvoiceNum] = useState(booking.invoice_number || '');
+  const [invoicePreview, setInvoicePreview] = useState(null);
+  const [invoiceLang, setInvoiceLang] = useState('de');
 
   const done      = allTasksDone(tasks);
   const doneCount = TASK_DEFS.filter(t => tasks[t.key]).length;
@@ -496,46 +782,44 @@ function BookingTaskCard({ booking, onTaskChange }) {
 
       {/* Expanded task list */}
       {expanded && (
-        <div className="mt-4 pt-4 border-t border-gray-100">
+        <div className="mt-4 pt-4 border-t border-gray-100 space-y-4">
+          {/* Task grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {TASK_DEFS.map(task => {
-              const isDone    = !!tasks[task.key];
-              const dueDate   = getEffectiveDue(task.key, booking);
-              const isOverdue = !isDone && dueDate && dueDate < today;
-
-              return (
-                <div
-                  key={task.key}
-                  className={`flex items-start gap-3 p-2.5 rounded-xl
-                    ${isDone ? 'bg-emerald-50' : isOverdue ? 'bg-red-50' : 'bg-gray-50'}`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isDone}
-                    onChange={e => toggle(e, task.key)}
-                    className="w-4 h-4 accent-emerald-600 cursor-pointer shrink-0 mt-0.5"
-                  />
-                  <span className="text-base shrink-0 mt-0.5">{task.icon}</span>
-                  <div className="flex-1 min-w-0">
-                    <span className={`text-sm block ${isDone ? 'line-through text-gray-400' : 'text-gray-700'}`}>
-                      {task.label}
-                    </span>
-                    <DueDateCell
-                      bookingId={booking.id}
-                      taskKey={task.key}
-                      booking={booking}
-                      isDone={isDone}
-                      onChanged={() => rerender(n => n + 1)}
-                    />
-                  </div>
-                  {isDone && <span className="text-xs text-emerald-500 font-bold shrink-0 mt-0.5">✓</span>}
-                  {isOverdue && <span className="text-xs text-red-500 font-bold shrink-0 mt-0.5">!</span>}
-                </div>
-              );
-            })}
+            {TASK_DEFS.map(task => (
+              <TaskRow
+                key={task.key}
+                task={task}
+                booking={booking}
+                tasks={tasks}
+                today={today}
+                invoiceNum={invoiceNum}
+                setInvoiceNum={setInvoiceNum}
+                onToggle={toggle}
+                onRerender={() => rerender(n => n + 1)}
+                onOpenInvoice={() => {
+                  const b = { ...booking, invoice_number: invoiceNum || booking.invoice_number };
+                  setInvoicePreview({ ...buildInvoicePreviewData(b, invoiceLang), extra_items: [] });
+                }}
+              />
+            ))}
           </div>
 
-          <div className="mt-3 flex gap-4 text-xs text-gray-400 flex-wrap">
+          {/* Notes field */}
+          <div className="space-y-1" onClick={e => e.stopPropagation()}>
+            <label className="text-xs font-medium text-gray-500 flex items-center gap-1">📝 Notiz zur Buchung</label>
+            <textarea
+              value={note}
+              placeholder="Interne Notizen, besondere Wünsche, Hinweise…"
+              rows={2}
+              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-400 bg-gray-50"
+              onChange={e => { setNote(e.target.value); setBookingNote(booking.id, e.target.value); }}
+            />
+          </div>
+
+          {/* Task timeline */}
+          <TaskTimeline booking={booking} tasks={tasks} />
+
+          <div className="flex gap-4 text-xs text-gray-400 flex-wrap">
             <span className="text-red-600 font-semibold">● Überfällig</span>
             <span className="text-amber-600 font-medium">● Bald fällig</span>
             <span className="text-gray-400">● Geplant</span>
@@ -543,7 +827,7 @@ function BookingTaskCard({ booking, onTaskChange }) {
           </div>
 
           {done && (
-            <div className="mt-3 flex items-center gap-2 p-3 bg-emerald-50 rounded-xl border border-emerald-200">
+            <div className="flex items-center gap-2 p-3 bg-emerald-50 rounded-xl border border-emerald-200">
               <span className="text-emerald-600 text-lg">🎉</span>
               <span className="text-sm font-semibold text-emerald-700">
                 Alle Aufgaben erledigt – Buchung vollständig abgeschlossen!
@@ -551,6 +835,38 @@ function BookingTaskCard({ booking, onTaskChange }) {
             </div>
           )}
         </div>
+      )}
+
+      {/* Invoice preview modal — rendered outside the expanded block so it's always accessible */}
+      {invoicePreview && (
+        <InvoicePreviewModal
+          data={invoicePreview}
+          onClose={() => setInvoicePreview(null)}
+          onLangChange={(lang) => {
+            const b = { ...booking, invoice_number: invoiceNum || booking.invoice_number };
+            const fresh = buildInvoicePreviewData(b, lang);
+            setInvoiceLang(lang);
+            setInvoicePreview(prev => ({
+              ...fresh,
+              // Keep user edits to address / amounts / extras
+              company_name:    prev.company_name,
+              guest_name:      prev.guest_name,
+              billing_street:  prev.billing_street,
+              billing_zip:     prev.billing_zip,
+              billing_city:    prev.billing_city,
+              billing_country: prev.billing_country,
+              invoice_number:  prev.invoice_number,
+              invoice_date:    prev.invoice_date,
+              brutto_total:    prev.brutto_total,
+              netto_total:     prev.netto_total,
+              vat_amount:      prev.vat_amount,
+              cleaning_fee:    prev.cleaning_fee,
+              discount_pct:    prev.discount_pct,
+              extra_items:     prev.extra_items,
+            }));
+          }}
+          onChange={(field, value) => setInvoicePreview(prev => ({ ...prev, [field]: value }))}
+        />
       )}
     </div>
   );

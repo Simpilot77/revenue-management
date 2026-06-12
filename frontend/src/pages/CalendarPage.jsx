@@ -173,8 +173,8 @@ export default function CalendarPage() {
         position: 'absolute',
         left: '6px',
         top: '4px',
-        width: spanWidth ? `${spanWidth}px` : '280px',
-        overflow: 'visible',
+        width: spanWidth ? `${Math.max(40, spanWidth - 8)}px` : '280px',
+        overflow: 'hidden',
         color: 'white',
         zIndex: 10,
         pointerEvents: 'none',
@@ -248,7 +248,7 @@ export default function CalendarPage() {
           <table className="text-xs w-full border-collapse" style={{ tableLayout: 'fixed' }}>
             <colgroup>
               <col style={{ width: '96px' }} />
-              {days.map(d => <col key={d} style={{ width: '40px' }} />)}
+              {days.map(d => <col key={d} style={{ width: '52px' }} />)}
             </colgroup>
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
@@ -330,7 +330,7 @@ export default function CalendarPage() {
                             const coDay = parseInt(staying.checkout_date?.slice(8, 10)) || days[days.length - 1];
                             const spanEnd = Math.min(days[days.length - 1], coDay - 1);
                             const spanDays = Math.max(1, spanEnd - (isLabel ? d : 0) + 1);
-                            const labelWidth = spanDays * 40 - 6;
+                            const labelWidth = spanDays * 52 - 6;
                             return (
                               <div
                                 style={{
@@ -399,7 +399,7 @@ export default function CalendarPage() {
                             return (
                               <div style={{
                                 position: 'absolute',
-                                top: 4, left: '50%',
+                                bottom: 4, left: '50%',
                                 transform: 'translateX(-50%)',
                                 zIndex: 15,
                                 pointerEvents: 'none',
