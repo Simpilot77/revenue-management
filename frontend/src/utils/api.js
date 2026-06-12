@@ -4,7 +4,7 @@ import {
   calcKpis, calcMonthly, calcChannels, calcPickup,
   calcLeadTime, calcYoY, calcForecast, calcHouses, calcGuestDistribution,
 } from './mockData';
-import { runLodgifySync } from './lodgifyClient';
+import { runLodgifySync, ENV_API_KEY, ENV_HOUSE_MAP } from './lodgifyClient';
 
 // In-memory mutable customers array
 let _customers = [...CUSTOMERS];
@@ -252,8 +252,9 @@ api.interceptors.request.use((config) => {
     // Credentials aus localStorage lesen
     let settings = {};
     try { settings = JSON.parse(localStorage.getItem('company_settings') || '{}'); } catch (_) {}
-    const apiKey      = settings.lodgify_api_key || '';
-    const houseMapRaw = settings.lodgify_house_map || '';
+    // Schlüssel + Haus-Map: erst localStorage, dann .env.local
+    const apiKey      = settings.lodgify_api_key  || ENV_API_KEY   || '';
+    const houseMapRaw = settings.lodgify_house_map || ENV_HOUSE_MAP || '';
 
     if (!apiKey) {
       data = {
