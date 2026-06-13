@@ -9,6 +9,10 @@ function getDaysInMonth(year, month) {
 function dateStr(y, m, d) {
   return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
+function fmtDateShort(ds) {
+  if (!ds) return '';
+  return new Date(ds).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+}
 
 const MONTH_NAMES = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
 const DAY_NAMES_SHORT = ['So','Mo','Di','Mi','Do','Fr','Sa'];
@@ -294,21 +298,35 @@ export default function CalendarPage() {
                             title={isBlock ? `🔒 Gesperrt${b.block_reason ? ': ' + b.block_reason : ''}` : `${b.guest_name} · ${b.guest_count}P · ${formatCurrency(b.total_price)}`}
                             onClick={(e) => { e.stopPropagation(); navigate(`/bookings/${b.id}/edit`); }}
                           >
-                            {/* Left notch for check-in */}
+                            {/* Check-in marker — green circle with arrow, sits on the bar's left edge */}
                             {checkinTriangle && (
-                              <div style={{
-                                position: 'absolute', left: 0, top: 0, bottom: 0, width: 10,
-                                background: `linear-gradient(to bottom right, rgba(255,255,255,0.25) 50%, transparent 50%)`,
-                                pointerEvents: 'none',
-                              }} />
+                              <div
+                                title={`Check-in: ${fmtDateShort(b.checkin_date)}`}
+                                style={{
+                                  position: 'absolute', left: -7, top: '50%', transform: 'translateY(-50%)',
+                                  width: 16, height: 16, borderRadius: '50%',
+                                  background: '#22c55e', border: '2px solid white',
+                                  boxShadow: '0 1px 3px rgba(0,0,0,0.35)',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  fontSize: '0.5rem', color: 'white', fontWeight: 900,
+                                  zIndex: 7, pointerEvents: 'none',
+                                }}
+                              >→</div>
                             )}
-                            {/* Right notch for check-out */}
+                            {/* Check-out marker — red circle with arrow, sits on the bar's right edge */}
                             {checkoutTriangle && (
-                              <div style={{
-                                position: 'absolute', right: 0, top: 0, bottom: 0, width: 10,
-                                background: `linear-gradient(to top left, rgba(0,0,0,0.15) 50%, transparent 50%)`,
-                                pointerEvents: 'none',
-                              }} />
+                              <div
+                                title={`Check-out: ${fmtDateShort(b.checkout_date)}`}
+                                style={{
+                                  position: 'absolute', right: -7, top: '50%', transform: 'translateY(-50%)',
+                                  width: 16, height: 16, borderRadius: '50%',
+                                  background: '#ef4444', border: '2px solid white',
+                                  boxShadow: '0 1px 3px rgba(0,0,0,0.35)',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  fontSize: '0.5rem', color: 'white', fontWeight: 900,
+                                  zIndex: 7, pointerEvents: 'none',
+                                }}
+                              >■</div>
                             )}
 
                             {/* Text content */}
@@ -374,6 +392,14 @@ export default function CalendarPage() {
           <span className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-sm inline-block bg-blue-200 border border-blue-500" />
             Heute
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-white font-black" style={{ backgroundColor: '#22c55e', border: '2px solid white', boxShadow: '0 1px 3px rgba(0,0,0,0.35)', fontSize: '0.5rem' }}>→</span>
+            Check-in
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-white font-black" style={{ backgroundColor: '#ef4444', border: '2px solid white', boxShadow: '0 1px 3px rgba(0,0,0,0.35)', fontSize: '0.5rem' }}>■</span>
+            Check-out
           </span>
           <span className="text-gray-400 ml-2">· Leere Zelle klicken = Reinigung markieren</span>
         </div>
