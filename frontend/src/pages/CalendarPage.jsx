@@ -51,6 +51,11 @@ function loadCleaningMarkers() {
 }
 function saveCleaningMarkersToStorage(m) { localStorage.setItem('cleaning_markers', JSON.stringify(m)); }
 
+function loadCleaningExclusions() {
+  try { return JSON.parse(localStorage.getItem('cleaning_exclusions') || '{}'); } catch { return {}; }
+}
+function saveCleaningExclusionsToStorage(m) { localStorage.setItem('cleaning_exclusions', JSON.stringify(m)); }
+
 // ── DAY_COL_W: pixel width of each day column
 const DAY_COL_W = 38;
 const ROW_H = 56; // px, height of each house row
@@ -66,6 +71,7 @@ export default function CalendarPage() {
   const [bookings, setBookings] = useState([]);
   const [cleaningMarkers, setCleaningMarkers] = useState(loadCleaningMarkers);
   const [cleaningModal, setCleaningModal] = useState(null);
+  const [cleaningExclusions, setCleaningExclusions] = useState(loadCleaningExclusions);
   const [tasksVersion, setTasksVersion] = useState(0);
   const [tooltip, setTooltip] = useState(null); // { booking, x, y }
   const containerRef = useRef(null);
@@ -89,25 +95,37 @@ export default function CalendarPage() {
   const dupeIds = findDuplicates(bookings);
 
   const getCleaningStatus = useCallback((houseId, ds) => {
+    const key = `${houseId}_${ds}`;
     try {
-      const tasks = JSON.parse(localStorage.getItem('booking_tasks') || '{}');
-      for (const b of bookings) {
-        if (b.house_id !== houseId) continue;
-        if (b.cleaning_required === false) continue;
-        const cd = b.cleaning_date?.slice(0,10) || b.checkout_date?.slice(0,10);
-        if (cd !== ds) continue;
-        const bt = tasks[b.id] || {};
-        if (bt.cleaning_done) return { status: 'done', bookingId: b.id };
-        if (bt.cleaning_org)  return { status: 'organized', bookingId: b.id };
-        return { status: 'planned', bookingId: b.id };
+      if (!cleaningExclusions[key]) {
+        const tasks = JSON.parse(localStorage.getItem('booking_tasks') || '{}');
+        for (const b of bookings) {
+          if (b.house_id !== houseId) continue;
+          if (b.cleaning_required === false) continue;
+          const cd = b.cleaning_date?.slice(0,10) || b.checkout_date?.slice(0,10);
+          if (cd !== ds) continue;
+          const bt = tasks[b.id] || {};
+          if (bt.cleaning_done) return { status: 'done', bookingId: b.id };
+          if (bt.cleaning_org)  return { status: 'organized', bookingId: b.id };
+          return { status: 'planned', bookingId: b.id };
+        }
       }
-      if (cleaningMarkers[`${houseId}_${ds}`]) return { status: 'planned', bookingId: null };
-      return null;
-    } catch {
-      if (cleaningMarkers[`${houseId}_${ds}`]) return { status: 'planned', bookingId: null };
-      return null;
-    }
-  }, [bookings, cleaningMarkers, tasksVersion]);
+    } catch {}
+    if (cleaningMarkers[key]) return { status: 'planned', bookingId: null };
+    return null;
+  }, [bookings, cleaningMarkers, cleaningExclusions, tasksVersion]);
+
+  // Returns the booking id whose checkout/cleaning cleaning indicator was completely
+  // removed (excluded) for this cell, so the modal can offer to restore it
+  const getExcludedBookingCleaning = useCallback((houseId, ds) => {
+    const key = `${houseId}_${ds}`;
+    if (!cleaningExclusions[key]) return null;
+    const b = bookings.find(b =>
+      b.house_id === houseId && b.cleaning_required !== false &&
+      (b.cleaning_date?.slice(0,10) || b.checkout_date?.slice(0,10)) === ds
+    );
+    return b ? b.id : null;
+  }, [bookings, cleaningExclusions]);
 
   const toggleCleaning = (houseId, ds) => {
     const key = `${houseId}_${ds}`;
@@ -115,6 +133,21 @@ export default function CalendarPage() {
     if (updated[key]) delete updated[key]; else updated[key] = true;
     setCleaningMarkers(updated);
     saveCleaningMarkersToStorage(updated);
+  };
+
+  const excludeBookingCleaning = (houseId, ds) => {
+    const key = `${houseId}_${ds}`;
+    const updated = { ...cleaningExclusions, [key]: true };
+    setCleaningExclusions(updated);
+    saveCleaningExclusionsToStorage(updated);
+  };
+
+  const restoreBookingCleaning = (houseId, ds) => {
+    const key = `${houseId}_${ds}`;
+    const updated = { ...cleaningExclusions };
+    delete updated[key];
+    setCleaningExclusions(updated);
+    saveCleaningExclusionsToStorage(updated);
   };
 
   // Sets the cleaning_org/cleaning_done flags on a booking's task entry
@@ -246,6 +279,7 @@ export default function CalendarPage() {
                         const isWe = dow === 0 || dow === 6;
                         const today = isToday(d);
                         const cs = getCleaningStatus(house.id, ds);
+                        const excludedBookingId = !cs ? getExcludedBookingCleaning(house.id, ds) : null;
                         return (
                           <div
                             key={d}
@@ -255,8 +289,8 @@ export default function CalendarPage() {
                             }}
                             className={`border-r border-gray-100 cursor-pointer
                               ${today ? '' : isWe ? 'bg-gray-100/30' : ''}`}
-                            title={cs ? `🧹 Reinigung (${cs.status}) – klicken` : 'Klicken = Reinigungstag markieren'}
-                            onClick={() => setCleaningModal({ houseId: house.id, houseName: house.name, date: ds, alreadySet: cs !== null, status: cs?.status, bookingId: cs?.bookingId ?? null })}
+                            title={cs ? `🧹 Reinigung (${cs.status}) – klicken` : excludedBookingId ? 'Reinigung entfernt – klicken zum Wiederherstellen' : 'Klicken = Reinigungstag markieren'}
+                            onClick={() => setCleaningModal({ houseId: house.id, houseName: house.name, date: ds, alreadySet: cs !== null, status: cs?.status, bookingId: cs?.bookingId ?? null, excludedBookingId })}
                           >
                             {today && <div className="absolute top-0 bottom-0 left-0 w-1 bg-violet-500" />}
                             {cs && (
@@ -519,6 +553,7 @@ export default function CalendarPage() {
                   {cleaningModal.status !== 'done' && (
                     <button className="btn-primary text-sm bg-green-600 hover:bg-green-700" onClick={() => { setBookingCleaningFlags(cleaningModal.bookingId, { org: true, done: true }); setCleaningModal(null); }}>✅ Als erledigt markieren</button>
                   )}
+                  <button className="btn-primary text-sm bg-red-600 hover:bg-red-700" onClick={() => { excludeBookingCleaning(cleaningModal.houseId, cleaningModal.date); setCleaningModal(null); }}>🗑 Komplett löschen</button>
                 </div>
               </>
             ) : cleaningModal.alreadySet ? (
@@ -526,7 +561,16 @@ export default function CalendarPage() {
                 <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-4">Bereits als Reinigungstag markiert.</p>
                 <div className="flex gap-3 justify-end">
                   <button className="btn-secondary text-sm" onClick={() => setCleaningModal(null)}>Abbrechen</button>
-                  <button className="btn-primary text-sm bg-red-600 hover:bg-red-700" onClick={() => { toggleCleaning(cleaningModal.houseId, cleaningModal.date); setCleaningModal(null); }}>🗑 Markierung entfernen</button>
+                  <button className="btn-primary text-sm bg-red-600 hover:bg-red-700" onClick={() => { toggleCleaning(cleaningModal.houseId, cleaningModal.date); setCleaningModal(null); }}>🗑 Komplett löschen</button>
+                </div>
+              </>
+            ) : cleaningModal.excludedBookingId ? (
+              <>
+                <p className="text-sm text-gray-600 mb-4">Die Reinigung zum Checkout dieser Buchung wurde entfernt.</p>
+                <div className="flex gap-3 justify-end">
+                  <button className="btn-secondary text-sm" onClick={() => setCleaningModal(null)}>Abbrechen</button>
+                  <button className="btn-primary text-sm" style={{ backgroundColor: '#f59e0b', borderColor: '#f59e0b' }} onClick={() => { restoreBookingCleaning(cleaningModal.houseId, cleaningModal.date); setCleaningModal(null); }}>🔁 Wiederherstellen</button>
+                  <button className="btn-primary text-sm bg-green-600 hover:bg-green-700" onClick={() => { toggleCleaning(cleaningModal.houseId, cleaningModal.date); setCleaningModal(null); }}>🧹 Neu anlegen</button>
                 </div>
               </>
             ) : (

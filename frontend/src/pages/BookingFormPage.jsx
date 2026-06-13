@@ -38,6 +38,7 @@ const EMPTY_FORM = {
   commission_amount: '',
   commission_overridden: false,
   deposit_taken: false,
+  deposit_amount: '',
   deposit_returned: false,
   invoice_sent: false,
   guests_registered: false,
@@ -88,6 +89,7 @@ export default function BookingFormPage() {
   const [invoicePreview, setInvoicePreview] = useState(null); // editable invoice data object
   const [lastInvNum, setLastInvNum] = useState(null); // last issued invoice number for this house
   const [guestChangeModal, setGuestChangeModal] = useState(null); // { payload, otherBookings, guestFields }
+  const [depositModal, setDepositModal] = useState(null); // { amount } while editing deposit amount
   const cleaningDateTouched = useRef(false);
 
   // ── localStorage helpers for task sync ──
@@ -136,6 +138,7 @@ export default function BookingFormPage() {
           commission_amount: b.commission_amount ?? '',
           commission_overridden: b.commission_overridden ?? false,
           deposit_taken: b.deposit_taken ?? false,
+          deposit_amount: b.deposit_amount ?? '',
           deposit_returned: b.deposit_returned ?? false,
           invoice_sent: taskState.invoice ?? b.invoice_sent ?? false,
           guests_registered: taskState.guests ?? b.guests_registered ?? false,
@@ -279,6 +282,7 @@ export default function BookingFormPage() {
     discount_percent: parseFloat(form.discount_percent) || 0,
     total_price: parseFloat(form.total_price),
     commission_amount: form.commission_amount !== '' ? parseFloat(form.commission_amount) : 0,
+    deposit_amount: form.deposit_amount !== '' ? parseFloat(form.deposit_amount) : null,
     cancellation_date: form.cancellation_date || null,
     billing_address: {
       street: form.billing_street || '',
@@ -706,9 +710,46 @@ export default function BookingFormPage() {
 
         {/* Status checkboxes */}
         <Section title="✅ Checkliste">
+          <Field label=" ">
+            <label className={`flex items-center gap-2 mt-1 cursor-pointer rounded-lg px-3 py-2 transition-colors ${form.deposit_taken ? 'bg-green-50' : 'bg-gray-50 hover:bg-gray-100'}`}>
+              <input
+                type="checkbox"
+                className="rounded text-green-600"
+                checked={form.deposit_taken}
+                onChange={e => {
+                  if (e.target.checked) {
+                    setDepositModal({ amount: form.deposit_amount || '' });
+                  } else {
+                    setForm(f => ({ ...f, deposit_taken: false, deposit_amount: '', deposit_returned: false }));
+                  }
+                }}
+              />
+              <span className={`text-sm ${form.deposit_taken ? 'text-green-700 font-medium' : 'text-gray-700'}`}>
+                🔒 Kaution genommen
+                {form.deposit_taken && form.deposit_amount !== '' && (
+                  <span className="ml-1 font-semibold">· {formatCurrency(form.deposit_amount)}</span>
+                )}
+              </span>
+              {form.deposit_taken && (
+                <button
+                  type="button"
+                  className="ml-auto text-xs text-blue-600 hover:underline"
+                  onClick={(e) => { e.preventDefault(); setDepositModal({ amount: form.deposit_amount || '' }); }}
+                >
+                  Betrag ändern
+                </button>
+              )}
+            </label>
+          </Field>
+          {form.deposit_taken && (
+            <Field label=" ">
+              <label className={`flex items-center gap-2 mt-1 cursor-pointer rounded-lg px-3 py-2 transition-colors ${form.deposit_returned ? 'bg-green-50' : 'bg-gray-50 hover:bg-gray-100'}`}>
+                <input type="checkbox" className="rounded text-green-600" checked={form.deposit_returned} onChange={e => set('deposit_returned', e.target.checked)} />
+                <span className={`text-sm ${form.deposit_returned ? 'text-green-700 font-medium' : 'text-gray-700'}`}>🔓 Kaution zurückgezahlt</span>
+              </label>
+            </Field>
+          )}
           {[
-            { key: 'deposit_taken',     label: '🔒 Kaution genommen' },
-            { key: 'deposit_returned',  label: '🔓 Kaution zurückgezahlt' },
             { key: 'invoice_sent',      label: '📧 Rechnung verschickt' },
             { key: 'guests_registered', label: '📋 Gäste registriert (Meldepflicht)' },
             { key: 'included_in_stats', label: '📊 In Auswertungen berücksichtigen' },
@@ -721,6 +762,56 @@ export default function BookingFormPage() {
             </Field>
           ))}
         </Section>
+
+        {/* Deposit amount modal */}
+        {depositModal && (
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}
+            onClick={() => {
+            if (form.deposit_amount === '') setForm(f => ({ ...f, deposit_taken: false }));
+            setDepositModal(null);
+          }}
+          >
+            <div className="card" style={{ minWidth: 320, maxWidth: 380, padding: 24 }} onClick={e => e.stopPropagation()}>
+              <h3 className="text-base font-semibold text-gray-900 mb-1">🔒 Kautionsbetrag</h3>
+              <p className="text-sm text-gray-500 mb-4">Bitte trage den Betrag der erhaltenen Kaution ein.</p>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                className="form-input w-full"
+                placeholder="0,00"
+                autoFocus
+                value={depositModal.amount}
+                onChange={e => setDepositModal({ amount: e.target.value })}
+              />
+              <div className="flex gap-3 justify-end mt-4">
+                <button
+                  type="button"
+                  className="btn-secondary text-sm"
+                  onClick={() => {
+                    // Cancel: if no amount was saved yet, undo "Kaution genommen"
+                    if (form.deposit_amount === '') setForm(f => ({ ...f, deposit_taken: false }));
+                    setDepositModal(null);
+                  }}
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary text-sm"
+                  disabled={depositModal.amount === ''}
+                  onClick={() => {
+                    setForm(f => ({ ...f, deposit_taken: true, deposit_amount: depositModal.amount }));
+                    setDepositModal(null);
+                  }}
+                >
+                  Speichern
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Booking Status */}
         <Section title="📌 Buchungsstatus">

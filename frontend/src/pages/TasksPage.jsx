@@ -277,10 +277,14 @@ function BookingDetailModal({ booking, house, title, onClose }) {
                 </span>
               )}
               {booking.deposit_taken && !booking.deposit_returned && (
-                <span className="text-xs font-medium px-2 py-1 rounded-full bg-blue-100 text-blue-700">🔒 Kaution hinterlegt</span>
+                <span className="text-xs font-medium px-2 py-1 rounded-full bg-blue-100 text-blue-700">
+                  🔒 Kaution hinterlegt{booking.deposit_amount != null ? ` · ${formatCurrency(booking.deposit_amount)}` : ''}
+                </span>
               )}
               {booking.deposit_returned && (
-                <span className="text-xs font-medium px-2 py-1 rounded-full bg-gray-100 text-gray-600">✓ Kaution zurück</span>
+                <span className="text-xs font-medium px-2 py-1 rounded-full bg-gray-100 text-gray-600">
+                  ✓ Kaution zurück{booking.deposit_amount != null ? ` · ${formatCurrency(booking.deposit_amount)}` : ''}
+                </span>
               )}
             </div>
           )}
