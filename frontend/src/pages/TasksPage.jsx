@@ -186,14 +186,20 @@ function BookingDetailModal({ booking, house, title, onClose }) {
           {/* Dates */}
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-gray-50 rounded-xl p-3">
-              <div className="text-xs text-gray-400 mb-1">Check-in</div>
+              <div className="text-xs text-gray-400 mb-1 flex items-center gap-1.5">
+                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-white font-black" style={{ backgroundColor: '#22c55e', fontSize: '0.55rem' }}>→</span>
+                Check-in
+              </div>
               <div className="text-sm font-semibold text-gray-800">{fmtDateFull(checkin)}</div>
               {daysIn >= 0 && daysIn < 30 && (
                 <div className="text-xs text-green-600 mt-0.5">{daysIn === 0 ? 'Heute' : `Vor ${daysIn} Tag${daysIn !== 1 ? 'en' : ''}`}</div>
               )}
             </div>
             <div className="bg-gray-50 rounded-xl p-3">
-              <div className="text-xs text-gray-400 mb-1">Check-out</div>
+              <div className="text-xs text-gray-400 mb-1 flex items-center gap-1.5">
+                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-white font-black" style={{ backgroundColor: '#ef4444', fontSize: '0.5rem' }}>■</span>
+                Check-out
+              </div>
               <div className="text-sm font-semibold text-gray-800">{fmtDateFull(checkout)}</div>
               {daysOut >= 0 && daysOut < 30 && (
                 <div className={`text-xs mt-0.5 ${daysOut === 0 ? 'text-red-600' : daysOut === 1 ? 'text-amber-600' : 'text-gray-500'}`}>
@@ -203,6 +209,47 @@ function BookingDetailModal({ booking, house, title, onClose }) {
             </div>
           </div>
 
+          {/* Stay progress bar */}
+          {booking.nights > 0 && (() => {
+            const totalNights = booking.nights;
+            const elapsed = daysBetween(checkin, today);
+            const percent = Math.max(0, Math.min(100, (elapsed / totalNights) * 100));
+            const isOngoing = today >= checkin && today < checkout;
+            return (
+              <div className="bg-gray-50 rounded-xl p-3">
+                <div className="flex items-center justify-between text-xs text-gray-400 mb-2">
+                  <span className="flex items-center gap-1">
+                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-white font-black" style={{ backgroundColor: '#22c55e', fontSize: '0.55rem' }}>→</span>
+                    {fmtDate(checkin)}
+                  </span>
+                  <span className="font-medium text-gray-500">🌙 {totalNights} Nächte</span>
+                  <span className="flex items-center gap-1">
+                    {fmtDate(checkout)}
+                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-white font-black" style={{ backgroundColor: '#ef4444', fontSize: '0.5rem' }}>■</span>
+                  </span>
+                </div>
+                <div className="relative h-2.5 rounded-full bg-gray-200 overflow-hidden">
+                  <div
+                    className="absolute inset-y-0 left-0 rounded-full"
+                    style={{ width: `${percent}%`, background: 'linear-gradient(to right, #22c55e, #2563eb)' }}
+                  />
+                  {isOngoing && (
+                    <div
+                      className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-white shadow"
+                      style={{ left: `${percent}%`, border: '2px solid #a855f7' }}
+                      title="Heute"
+                    />
+                  )}
+                </div>
+                {isOngoing && (
+                  <div className="text-center text-xs text-violet-600 font-medium mt-1.5">
+                    Tag {Math.max(1, elapsed)} von {totalNights} · noch {Math.max(0, totalNights - elapsed)} Nacht{totalNights - elapsed !== 1 ? 'en' : ''}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           {/* Key details */}
           <div className="space-y-2">
             {[
@@ -211,7 +258,7 @@ function BookingDetailModal({ booking, house, title, onClose }) {
               ['Gesamtpreis',  formatCurrency(booking.total_price)],
               booking.invoice_number && ['Rechnungsnr.', booking.invoice_number],
               booking.channel && ['Kanal', booking.channel],
-              booking.booking_date && ['Buchungsdatum', booking.booking_date.slice(0, 10)],
+              booking.booking_date && ['Buchungsdatum', fmtDateFull(booking.booking_date)],
             ].filter(Boolean).map(([label, value]) => (
               <div key={label} className="flex justify-between items-center text-sm">
                 <span className="text-gray-400">{label}</span>
