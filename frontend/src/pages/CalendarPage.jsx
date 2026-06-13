@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { formatCurrency } from '../utils/format';
@@ -6,37 +6,22 @@ import { formatCurrency } from '../utils/format';
 function getDaysInMonth(year, month) {
   return new Date(year, month + 1, 0).getDate();
 }
-
 function dateStr(y, m, d) {
   return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
 const MONTH_NAMES = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
-const DAY_NAMES = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+const DAY_NAMES_SHORT = ['So','Mo','Di','Mi','Do','Fr','Sa'];
 
-const STATUS_COLOR = {
-  eingecheckt: '#16a34a',
-  ausgecheckt: '#9ca3af',
-  angefragt:   '#f59e0b',
-  bestaetigt:  '#1d4ed8',
-  gesperrt:    '#475569', // dark slate – owner block
+const STATUS_META = {
+  eingecheckt: { bg: '#16a34a', light: '#dcfce7', text: '#14532d', label: 'Eingecheckt' },
+  ausgecheckt: { bg: '#6b7280', light: '#f3f4f6', text: '#374151', label: 'Ausgecheckt' },
+  angefragt:   { bg: '#d97706', light: '#fef3c7', text: '#78350f', label: 'Angefragt'   },
+  bestaetigt:  { bg: '#2563eb', light: '#dbeafe', text: '#1e3a8a', label: 'Bestätigt'   },
+  gesperrt:    { bg: '#475569', light: '#f1f5f9', text: '#1e293b', label: 'Gesperrt'    },
 };
-const STATUS_COLOR_DARK = {
-  eingecheckt: '#15803d',
-  ausgecheckt: '#6b7280',
-  angefragt:   '#d97706',
-  bestaetigt:  '#1e40af',
-  gesperrt:    '#334155',
-};
-const getColor = (status) => STATUS_COLOR[status] || '#1d4ed8';
-const getDarkColor = (status) => STATUS_COLOR_DARK[status] || '#1e40af';
+const getColor = (status) => (STATUS_META[status] || STATUS_META.bestaetigt).bg;
 
-// Row height and bar padding
-const ROW_H = 120;  // px — tall enough for all info lines
-const BAR_TOP = 5;
-const BAR_BOT = 5;
-
-// Detect duplicate bookings: same house overlap OR same guest overlap
 function findDuplicates(bookings) {
   const dupeIds = new Set();
   const active = bookings.filter(b => ['bestaetigt','eingecheckt','ausgecheckt'].includes(b.status));
@@ -45,25 +30,25 @@ function findDuplicates(bookings) {
       const a = active[i], b = active[j];
       const overlap = a.checkin_date < b.checkout_date && b.checkin_date < a.checkout_date;
       if (!overlap) continue;
-      const sameHouse = a.house_id === b.house_id;
-      const sameGuest = (a.guest_name || '').toLowerCase().trim() === (b.guest_name || '').toLowerCase().trim() && a.guest_name;
-      if (sameHouse || sameGuest) {
-        dupeIds.add(a.id);
-        dupeIds.add(b.id);
+      if (a.house_id === b.house_id || ((a.guest_name||'').toLowerCase().trim() === (b.guest_name||'').toLowerCase().trim() && a.guest_name)) {
+        dupeIds.add(a.id); dupeIds.add(b.id);
       }
     }
   }
   return dupeIds;
 }
 
-// ── Cleaning marker helpers ────────────────────────────────────────────────────
 function loadCleaningMarkers() {
   try { return JSON.parse(localStorage.getItem('cleaning_markers') || '{}'); } catch { return {}; }
 }
-function saveCleaningMarkersToStorage(markers) {
-  localStorage.setItem('cleaning_markers', JSON.stringify(markers));
-}
+function saveCleaningMarkersToStorage(m) { localStorage.setItem('cleaning_markers', JSON.stringify(m)); }
 
+// ── DAY_COL_W: pixel width of each day column
+const DAY_COL_W = 38;
+const ROW_H = 56; // px, height of each house row
+const HOUSE_COL_W = 130; // sticky left column
+
+// ─────────────────────────────────────────────────────────────────────────────
 export default function CalendarPage() {
   const navigate = useNavigate();
   const now = new Date();
@@ -72,47 +57,41 @@ export default function CalendarPage() {
   const [houses, setHouses] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [cleaningMarkers, setCleaningMarkers] = useState(loadCleaningMarkers);
-  const [cleaningModal, setCleaningModal] = useState(null); // { houseId, houseName, date }
+  const [cleaningModal, setCleaningModal] = useState(null);
+  const [tooltip, setTooltip] = useState(null); // { booking, x, y }
+  const containerRef = useRef(null);
 
   const daysInMonth = getDaysInMonth(year, month);
 
-  useEffect(() => {
-    api.get('/meta/houses').then(r => setHouses(r.data));
-  }, []);
+  useEffect(() => { api.get('/meta/houses').then(r => setHouses(r.data)); }, []);
 
   useEffect(() => {
-    const monthFrom = dateStr(year, month, 1);
-    const monthTo = dateStr(year, month, daysInMonth);
-    api.get('/bookings', { params: { from: monthFrom, to: monthTo, limit: 300 } })
-      .then(r => setBookings(r.data.data));
+    const from = dateStr(year, month, 1);
+    const to   = dateStr(year, month, daysInMonth);
+    api.get('/bookings', { params: { from, to, limit: 300 } }).then(r => setBookings(r.data.data));
   }, [year, month]);
 
   const prevMonth = () => { if (month === 0) { setYear(y => y - 1); setMonth(11); } else setMonth(m => m - 1); };
   const nextMonth = () => { if (month === 11) { setYear(y => y + 1); setMonth(0); } else setMonth(m => m + 1); };
+  const goToday   = () => { setYear(now.getFullYear()); setMonth(now.getMonth()); };
 
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
   const isToday = (d) => year === now.getFullYear() && month === now.getMonth() && d === now.getDate();
   const dupeIds = findDuplicates(bookings);
 
-  // Returns cleaning status for a house+date:
-  // null       = no cleaning
-  // 'done'     = cleaning_done checked (green)
-  // 'organized'= cleaning_org checked, not done (yellow)
-  // 'planned'  = cleaning date set but neither org nor done (red)
   const getCleaningStatus = useCallback((houseId, ds) => {
     try {
       const tasks = JSON.parse(localStorage.getItem('booking_tasks') || '{}');
       for (const b of bookings) {
         if (b.house_id !== houseId) continue;
         if (b.cleaning_required === false) continue;
-        const cd = b.cleaning_date?.slice(0, 10) || b.checkout_date?.slice(0, 10);
+        const cd = b.cleaning_date?.slice(0,10) || b.checkout_date?.slice(0,10);
         if (cd !== ds) continue;
         const bt = tasks[b.id] || {};
         if (bt.cleaning_done) return 'done';
         if (bt.cleaning_org)  return 'organized';
         return 'planned';
       }
-      // Manual marker without task data → treat as planned
       if (cleaningMarkers[`${houseId}_${ds}`]) return 'planned';
       return null;
     } catch {
@@ -121,380 +100,311 @@ export default function CalendarPage() {
     }
   }, [bookings, cleaningMarkers]);
 
-  // Legacy helper (bool) used for click tooltip and modal
-  const isCleaningDay = useCallback((houseId, ds) => {
-    return getCleaningStatus(houseId, ds) !== null;
-  }, [getCleaningStatus]);
-
   const toggleCleaning = (houseId, ds) => {
     const key = `${houseId}_${ds}`;
     const updated = { ...cleaningMarkers };
-    if (updated[key]) {
-      delete updated[key];
-    } else {
-      updated[key] = true;
-    }
+    if (updated[key]) delete updated[key]; else updated[key] = true;
     setCleaningMarkers(updated);
     saveCleaningMarkersToStorage(updated);
   };
 
-  const VISIBLE_STATUSES = ['bestaetigt','eingecheckt','ausgecheckt','angefragt','gesperrt'];
+  const VISIBLE = ['bestaetigt','eingecheckt','ausgecheckt','angefragt','gesperrt'];
 
-  const getCellInfo = (houseId, day) => {
-    const d = dateStr(year, month, day);
-    const active = bookings.filter(b =>
-      b.house_id === houseId &&
-      VISIBLE_STATUSES.includes(b.status)
-    );
-    // Owner blocks take lowest priority – regular bookings shown first
-    const checkin  = active.find(b => b.checkin_date?.slice(0,10) === d);
-    const checkout = active.find(b => b.checkout_date?.slice(0,10) === d);
-    const staying  = active.find(b =>
-      b.checkin_date?.slice(0,10) < d && b.checkout_date?.slice(0,10) > d
-    );
-    return { checkin, checkout, staying };
-  };
-
-  const isLabelDay = (booking, day) => {
-    const checkinDay = booking.checkin_date?.slice(0,10);
+  // Build booking segments: one segment per booking visible this month
+  const buildSegments = (houseId) => {
     const monthStart = dateStr(year, month, 1);
-    const firstBlue = new Date(checkinDay);
-    firstBlue.setDate(firstBlue.getDate() + 1);
-    const firstBlueStr = firstBlue.toISOString().slice(0,10);
-    if (firstBlueStr >= monthStart) return firstBlueStr === dateStr(year, month, day);
-    return day === 1;
-  };
-
-  // Multi-line label rendered inside the booking bar — width = actual booking span in pixels
-  const BookingLabel = ({ booking, isDupe, spanWidth }) => {
-    const isBlock = booking.status === 'gesperrt';
-    return (
-      <div style={{
-        position: 'absolute',
-        left: '6px',
-        top: '4px',
-        width: spanWidth ? `${Math.max(40, spanWidth - 8)}px` : '280px',
-        overflow: 'hidden',
-        color: 'white',
-        zIndex: 10,
-        pointerEvents: 'none',
-        lineHeight: 1.4,
-      }}>
-        {isBlock ? (
-          <>
-            <div style={{ fontSize: '0.65rem', fontWeight: 700, textShadow: '0 1px 2px rgba(0,0,0,0.6)', whiteSpace: 'nowrap' }}>
-              🔒 Gesperrt
-            </div>
-            {booking.block_reason && (
-              <div style={{ fontSize: '0.6rem', opacity: 0.9, textShadow: '0 1px 2px rgba(0,0,0,0.4)', whiteSpace: 'nowrap' }}>
-                {booking.block_reason}
-              </div>
-            )}
-            <div style={{ fontSize: '0.58rem', opacity: 0.8, textShadow: '0 1px 2px rgba(0,0,0,0.4)', whiteSpace: 'nowrap' }}>
-              {booking.nights} {booking.nights === 1 ? 'Nacht' : 'Nächte'}
-            </div>
-          </>
-        ) : (
-          <>
-            {/* Guest name */}
-            <div style={{ fontSize: '0.65rem', fontWeight: 700, textShadow: '0 1px 2px rgba(0,0,0,0.55)', wordBreak: 'break-word' }}>
-              {isDupe && <span style={{ backgroundColor: '#f97316', borderRadius: '2px', padding: '0 2px', marginRight: '3px', fontSize: '0.58rem' }}>⚠ Doppelt</span>}
-              {booking.guest_name}
-            </div>
-            {/* Persons + deposit */}
-            <div style={{ fontSize: '0.6rem', opacity: 0.92, textShadow: '0 1px 2px rgba(0,0,0,0.4)', whiteSpace: 'nowrap' }}>
-              👥 {booking.guest_count} {booking.guest_count === 1 ? 'Person' : 'Personen'}
-              {booking.deposit_taken && !booking.deposit_returned ? '  🔒 Kaution' : ''}
-            </div>
-            {/* Total price */}
-            <div style={{ fontSize: '0.6rem', opacity: 0.92, fontWeight: 600, textShadow: '0 1px 2px rgba(0,0,0,0.4)', whiteSpace: 'nowrap' }}>
-              💶 {formatCurrency(booking.total_price)}
-            </div>
-            {/* ADR */}
-            {booking.daily_rate > 0 && (
-              <div style={{ fontSize: '0.6rem', opacity: 0.9, textShadow: '0 1px 2px rgba(0,0,0,0.4)', whiteSpace: 'nowrap' }}>
-                ADR {formatCurrency(booking.daily_rate)}
-              </div>
-            )}
-            {/* Invoice number */}
-            {booking.invoice_number && (
-              <div style={{ fontSize: '0.58rem', opacity: 0.88, fontFamily: 'monospace', textShadow: '0 1px 2px rgba(0,0,0,0.4)', whiteSpace: 'nowrap' }}>
-                🧾 {booking.invoice_number}
-              </div>
-            )}
-            {/* Guest registration */}
-            <div style={{ fontSize: '0.58rem', opacity: 0.88, textShadow: '0 1px 2px rgba(0,0,0,0.4)', whiteSpace: 'nowrap' }}>
-              {booking.guests_registered ? '✅ Gäste registriert' : '☐ Gäste nicht registriert'}
-            </div>
-          </>
-        )}
-      </div>
-    );
+    const monthEnd   = dateStr(year, month, daysInMonth);
+    return bookings
+      .filter(b => b.house_id === houseId && VISIBLE.includes(b.status))
+      .filter(b => b.checkin_date?.slice(0,10) <= monthEnd && b.checkout_date?.slice(0,10) > monthStart)
+      .map(b => {
+        const ciDay = b.checkin_date?.slice(0,10) >= monthStart
+          ? parseInt(b.checkin_date.slice(8,10))
+          : 1;
+        const coDay = b.checkout_date?.slice(0,10) <= monthEnd
+          ? parseInt(b.checkout_date.slice(8,10))
+          : daysInMonth + 1;
+        const clippedLeft  = b.checkin_date?.slice(0,10) < monthStart;
+        const clippedRight = b.checkout_date?.slice(0,10) > monthEnd;
+        const spanDays = coDay - ciDay; // checkout day is exclusive (half-cell)
+        return { booking: b, ciDay, coDay, clippedLeft, clippedRight, spanDays };
+      });
   };
 
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Belegungs-Kalender</h1>
-        <div className="flex items-center gap-3">
-          <button onClick={prevMonth} className="btn-secondary py-1 px-3 text-lg">‹</button>
-          <span className="font-semibold text-gray-700 w-44 text-center">{MONTH_NAMES[month]} {year}</span>
-          <button onClick={nextMonth} className="btn-secondary py-1 px-3 text-lg">›</button>
+    <div className="flex flex-col h-full" style={{ minHeight: 0 }}>
+      {/* ── Top bar ── */}
+      <div className="px-6 py-4 flex items-center justify-between bg-white border-b border-gray-200 shrink-0">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900 tracking-tight">Belegungskalender</h1>
+          <p className="text-xs text-gray-400 mt-0.5">Übersicht aller Häuser · Klick auf Buchung öffnet Details</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={goToday} className="btn-secondary text-sm py-1.5 px-4">Heute</button>
+          <button onClick={prevMonth} className="btn-secondary py-1.5 px-3 text-base">‹</button>
+          <span className="font-semibold text-gray-800 w-44 text-center text-sm">
+            {MONTH_NAMES[month]} {year}
+          </span>
+          <button onClick={nextMonth} className="btn-secondary py-1.5 px-3 text-base">›</button>
         </div>
       </div>
 
-      <div className="card p-0 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="text-xs w-full border-collapse" style={{ tableLayout: 'fixed' }}>
-            <colgroup>
-              <col style={{ width: '96px' }} />
-              {days.map(d => <col key={d} style={{ width: '52px' }} />)}
-            </colgroup>
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="text-left px-3 py-3 font-semibold text-gray-600 sticky left-0 bg-gray-50 z-20">Haus</th>
+      {/* ── Calendar grid ── */}
+      <div className="flex-1 overflow-auto px-6 py-4" ref={containerRef}>
+        <div className="rounded-xl border border-gray-200 overflow-hidden shadow-sm bg-white">
+          <div style={{ overflowX: 'auto' }}>
+            {/* min-width prevents shrinking below needed width */}
+            <div style={{ minWidth: `${HOUSE_COL_W + DAY_COL_W * daysInMonth}px` }}>
+
+              {/* ── Header row ── */}
+              <div
+                className="flex border-b border-gray-200 bg-gray-50 sticky top-0 z-20"
+                style={{ height: 52 }}
+              >
+                {/* House label */}
+                <div
+                  className="shrink-0 flex items-end px-4 pb-2 border-r border-gray-200 bg-gray-50 sticky left-0 z-30"
+                  style={{ width: HOUSE_COL_W, minWidth: HOUSE_COL_W }}
+                >
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Haus</span>
+                </div>
+                {/* Day columns */}
                 {days.map(d => {
                   const dow = new Date(year, month, d).getDay();
-                  const weekend = dow === 0 || dow === 6;
+                  const isWe = dow === 0 || dow === 6;
+                  const today = isToday(d);
                   return (
-                    <th
+                    <div
                       key={d}
-                      style={{ padding: 0 }}
-                      className={`py-2 text-center font-medium ${isToday(d) ? 'text-blue-900' : weekend ? 'bg-gray-100 text-gray-400' : 'text-gray-500'}`}
-                    style={isToday(d) ? { backgroundColor: '#bfdbfe', boxShadow: 'inset 0 -2px 0 #3b82f6' } : undefined}
+                      style={{ width: DAY_COL_W, minWidth: DAY_COL_W }}
+                      className={`shrink-0 flex flex-col items-center justify-end pb-1.5 relative
+                        ${today ? '' : isWe ? 'bg-gray-100/60' : ''}`}
                     >
-                      <div className="text-xs font-semibold">{d}</div>
-                      <div className="text-gray-300 font-normal" style={{ fontSize: '0.55rem' }}>{DAY_NAMES[dow]}</div>
-                    </th>
+                      {today && (
+                        <div className="absolute inset-0 bg-blue-50" />
+                      )}
+                      <span className={`relative z-1 text-xs font-bold leading-none
+                        ${today ? 'text-blue-600' : isWe ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {d}
+                      </span>
+                      <span className={`relative z-1 mt-0.5 leading-none
+                        ${today ? 'text-blue-400' : 'text-gray-300'}`}
+                        style={{ fontSize: '0.6rem' }}>
+                        {DAY_NAMES_SHORT[dow]}
+                      </span>
+                      {today && (
+                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500" />
+                      )}
+                    </div>
                   );
                 })}
-              </tr>
-            </thead>
-            <tbody>
-              {houses.map((house, hi) => (
-                <tr key={house.id} className={hi % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'} style={{ height: `${ROW_H}px` }}>
-                  <td
-                    className="px-3 font-semibold text-gray-700 sticky left-0 bg-inherit z-10 border-r border-gray-100"
-                    style={{ verticalAlign: 'middle' }}
+              </div>
+
+              {/* ── House rows ── */}
+              {houses.map((house, hi) => {
+                const segments = buildSegments(house.id);
+                return (
+                  <div
+                    key={house.id}
+                    className={`flex border-b border-gray-100 relative ${hi % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}
+                    style={{ height: ROW_H }}
                   >
-                    <div>{house.name}</div>
-                    <div className="text-gray-400 font-normal text-xs">{house.capacity} Betten</div>
-                  </td>
-                  {days.map(d => {
-                    const ds = dateStr(year, month, d);
-                    const { checkin, checkout, staying } = getCellInfo(house.id, d);
-                    const dow = new Date(year, month, d).getDay();
-                    const weekend = dow === 0 || dow === 6;
-                    const todayBg = isToday(d) ? 'rgba(96,165,250,0.18)' : weekend ? 'rgba(243,244,246,0.5)' : 'transparent';
-                    const todayBorder = isToday(d) ? '2px solid #3b82f6' : undefined;
-                    const cleaningStatus = getCleaningStatus(house.id, ds);
-                    const cleaning = cleaningStatus !== null;
+                    {/* Sticky house label */}
+                    <div
+                      className={`shrink-0 flex flex-col justify-center px-4 border-r border-gray-200 sticky left-0 z-10 ${hi % 2 === 0 ? 'bg-white' : 'bg-gray-50/90'}`}
+                      style={{ width: HOUSE_COL_W, minWidth: HOUSE_COL_W }}
+                    >
+                      <span className="text-sm font-semibold text-gray-800 leading-tight">{house.name}</span>
+                      <span className="text-xs text-gray-400 mt-0.5">{house.capacity} Betten</span>
+                    </div>
 
-                    return (
-                      <td
-                        key={d}
-                        style={{
-                          padding: 0,
-                          position: 'relative',
-                          verticalAlign: 'middle',
-                          background: todayBg,
-                          borderLeft: todayBorder || '1px solid #f3f4f6',
-                          borderRight: todayBorder,
-                          overflow: 'visible',
-                          cursor: 'pointer',
-                        }}
-                        title={cleaning ? `🧹 Reinigung am ${ds} – klicken zum Entfernen` : `${ds} – klicken zum Markieren als Reinigungstag`}
-                        onClick={() => setCleaningModal({ houseId: house.id, houseName: house.name, date: ds, alreadySet: cleaning })}
-                      >
-                        <div style={{ position: 'relative', height: `${ROW_H}px`, overflow: 'visible' }}>
-
-                          {/* Cleaning day background overlay — color by status */}
-                          {cleaning && (() => {
-                            const bgMap = { planned: 'rgba(239,68,68,0.15)', organized: 'rgba(251,191,36,0.22)', done: 'rgba(34,197,94,0.18)' };
-                            const bdMap = { planned: '#ef4444', organized: '#f59e0b', done: '#22c55e' };
-                            return (
+                    {/* Day cells — background only (grid lines + today highlight + cleaning) */}
+                    <div className="relative flex flex-1" style={{ height: ROW_H }}>
+                      {days.map(d => {
+                        const ds = dateStr(year, month, d);
+                        const dow = new Date(year, month, d).getDay();
+                        const isWe = dow === 0 || dow === 6;
+                        const today = isToday(d);
+                        const cs = getCleaningStatus(house.id, ds);
+                        return (
+                          <div
+                            key={d}
+                            style={{ width: DAY_COL_W, minWidth: DAY_COL_W, position: 'relative', flexShrink: 0 }}
+                            className={`border-r border-gray-100 cursor-pointer
+                              ${today ? 'bg-blue-50/60' : isWe ? 'bg-gray-100/30' : ''}`}
+                            title={cs ? `🧹 Reinigung (${cs}) – klicken` : 'Klicken = Reinigungstag markieren'}
+                            onClick={() => setCleaningModal({ houseId: house.id, houseName: house.name, date: ds, alreadySet: cs !== null })}
+                          >
+                            {today && <div className="absolute top-0 bottom-0 left-0 w-0.5 bg-blue-400 opacity-60" />}
+                            {cs && (
+                              <div className={`absolute inset-0 opacity-20 pointer-events-none
+                                ${cs === 'done' ? 'bg-green-500' : cs === 'organized' ? 'bg-amber-400' : 'bg-red-500'}`} />
+                            )}
+                            {cs && (
                               <div style={{
-                                position: 'absolute',
-                                top: 0, bottom: 0, left: 0, right: 0,
-                                backgroundColor: bgMap[cleaningStatus],
-                                borderTop: `2px solid ${bdMap[cleaningStatus]}`,
-                                zIndex: 1,
+                                position: 'absolute', bottom: 3, left: '50%', transform: 'translateX(-50%)',
+                                fontSize: '0.55rem', fontWeight: 700, whiteSpace: 'nowrap', zIndex: 2,
+                                color: cs === 'done' ? '#166534' : cs === 'organized' ? '#92400e' : '#991b1b',
+                              }}>
+                                {cs === 'done' ? '✓ Reinig.' : cs === 'organized' ? '◷ Reinig.' : '🧹 Reinig.'}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {/* Booking bars — absolutely positioned over the day cells */}
+                      {segments.map(({ booking: b, ciDay, coDay, clippedLeft, clippedRight, spanDays }) => {
+                        const meta = STATUS_META[b.status] || STATUS_META.bestaetigt;
+                        const isDupe = dupeIds.has(b.id);
+                        const barLeft  = (ciDay - 1) * DAY_COL_W + (clippedLeft ? 0 : DAY_COL_W * 0.25);
+                        // checkout is exclusive; bar ends at left edge of checkout day
+                        const barRight = (coDay - 1) * DAY_COL_W - (clippedRight ? 0 : DAY_COL_W * 0.25);
+                        const barWidth = Math.max(8, barRight - barLeft);
+                        const barTop    = ROW_H * 0.16;
+                        const barHeight = ROW_H * 0.68;
+
+                        // Checkin/checkout diagonal triangles
+                        const checkinTriangle  = !clippedLeft;
+                        const checkoutTriangle = !clippedRight;
+
+                        const isBlock = b.status === 'gesperrt';
+
+                        return (
+                          <div
+                            key={b.id}
+                            style={{
+                              position: 'absolute',
+                              left: barLeft,
+                              top: barTop,
+                              width: barWidth,
+                              height: barHeight,
+                              backgroundColor: meta.bg,
+                              borderRadius: `${checkinTriangle ? 5 : 0}px ${checkoutTriangle ? 5 : 0}px ${checkoutTriangle ? 5 : 0}px ${checkinTriangle ? 5 : 0}px`,
+                              cursor: 'pointer',
+                              zIndex: 5,
+                              overflow: 'hidden',
+                              boxShadow: isDupe ? `0 0 0 2px #f97316, 0 2px 6px rgba(0,0,0,0.25)` : '0 1px 4px rgba(0,0,0,0.18)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              paddingLeft: 8,
+                              paddingRight: 6,
+                              gap: 4,
+                            }}
+                            title={isBlock ? `🔒 Gesperrt${b.block_reason ? ': ' + b.block_reason : ''}` : `${b.guest_name} · ${b.guest_count}P · ${formatCurrency(b.total_price)}`}
+                            onClick={(e) => { e.stopPropagation(); navigate(`/bookings/${b.id}/edit`); }}
+                          >
+                            {/* Left notch for check-in */}
+                            {checkinTriangle && (
+                              <div style={{
+                                position: 'absolute', left: 0, top: 0, bottom: 0, width: 10,
+                                background: `linear-gradient(to bottom right, rgba(255,255,255,0.25) 50%, transparent 50%)`,
                                 pointerEvents: 'none',
                               }} />
-                            );
-                          })()}
+                            )}
+                            {/* Right notch for check-out */}
+                            {checkoutTriangle && (
+                              <div style={{
+                                position: 'absolute', right: 0, top: 0, bottom: 0, width: 10,
+                                background: `linear-gradient(to top left, rgba(0,0,0,0.15) 50%, transparent 50%)`,
+                                pointerEvents: 'none',
+                              }} />
+                            )}
 
-                          {/* MID-STAY — full-width bar */}
-                          {staying && (() => {
-                            const isLabel = isLabelDay(staying, d);
-                            const coDay = parseInt(staying.checkout_date?.slice(8, 10)) || days[days.length - 1];
-                            const spanEnd = Math.min(days[days.length - 1], coDay - 1);
-                            const spanDays = Math.max(1, spanEnd - (isLabel ? d : 0) + 1);
-                            const labelWidth = spanDays * 52 - 6;
-                            return (
-                              <div
-                                style={{
-                                  position: 'absolute',
-                                  top: BAR_TOP, bottom: BAR_BOT,
-                                  left: -1, right: 0,
-                                  backgroundColor: getColor(staying.status),
-                                  cursor: 'pointer',
-                                  zIndex: isLabel ? 5 : 2,
-                                  overflow: 'visible',
-                                }}
-                                title={`${staying.guest_name} · ${staying.guest_count}P · ${formatCurrency(staying.total_price)}`}
-                                onClick={(e) => { e.stopPropagation(); navigate(`/bookings/${staying.id}/edit`); }}
-                              >
-                                {isLabel && (
-                                  <BookingLabel booking={staying} isDupe={dupeIds.has(staying.id)} spanWidth={labelWidth} />
-                                )}
+                            {/* Text content */}
+                            <div style={{
+                              overflow: 'hidden',
+                              color: 'white',
+                              flexShrink: 1,
+                              minWidth: 0,
+                            }}>
+                              {isDupe && (
+                                <div style={{ fontSize: '0.55rem', background: '#f97316', borderRadius: 3, padding: '0 3px', display: 'inline-block', marginBottom: 1, fontWeight: 700 }}>⚠ Doppelt</div>
+                              )}
+                              <div style={{
+                                fontSize: '0.7rem', fontWeight: 700,
+                                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                                textShadow: '0 1px 2px rgba(0,0,0,0.4)',
+                                lineHeight: 1.2,
+                              }}>
+                                {isBlock ? '🔒 Gesperrt' : b.guest_name}
                               </div>
-                            );
-                          })()}
-
-                          {/* CHECKOUT — \ diagonal: red upper-left, transparent lower-right */}
-                          {checkout && (
-                            <div
-                              style={{
-                                position: 'absolute',
-                                top: BAR_TOP, bottom: BAR_BOT,
-                                left: -1, right: 0,
-                                background: 'linear-gradient(to bottom right, #ef4444 50%, transparent 50%)',
-                                cursor: 'pointer',
-                                zIndex: 3,
-                              }}
-                              title={`Abreise: ${checkout.guest_name}`}
-                              onClick={(e) => { e.stopPropagation(); navigate(`/bookings/${checkout.id}/edit`); }}
-                            >
-                              {dupeIds.has(checkout.id) && (
-                                <div style={{ position: 'absolute', top: 2, right: 2, fontSize: '0.5rem', background: '#f97316', color: 'white', borderRadius: '2px', padding: '0 2px', zIndex: 15 }}>⚠</div>
+                              {!isBlock && barWidth > 80 && (
+                                <div style={{
+                                  fontSize: '0.6rem', opacity: 0.9,
+                                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                                  textShadow: '0 1px 2px rgba(0,0,0,0.3)',
+                                  lineHeight: 1.2,
+                                }}>
+                                  {b.nights}N · {formatCurrency(b.total_price)}
+                                </div>
                               )}
                             </div>
-                          )}
-
-                          {/* CHECKIN — green lower-right triangle */}
-                          {checkin && (
-                            <div
-                              style={{
-                                position: 'absolute',
-                                top: BAR_TOP, bottom: BAR_BOT,
-                                left: 0, right: 0,
-                                background: 'linear-gradient(to top left, #22c55e 50%, transparent 50%)',
-                                cursor: 'pointer',
-                                zIndex: 3,
-                              }}
-                              title={`${checkin.guest_name} · ${checkin.guest_count}P · ${formatCurrency(checkin.total_price)}`}
-                              onClick={(e) => { e.stopPropagation(); navigate(`/bookings/${checkin.id}/edit`); }}
-                            />
-                          )}
-
-                          {/* Cleaning badge — color by status */}
-                          {cleaning && (() => {
-                            const styles = {
-                              planned:    { bg: '#fee2e2', border: '#ef4444', color: '#7f1d1d', label: '🧹 Geplant' },
-                              organized:  { bg: '#fef3c7', border: '#f59e0b', color: '#78350f', label: '🧹 Organisiert' },
-                              done:       { bg: '#dcfce7', border: '#22c55e', color: '#14532d', label: '🧹 Erledigt' },
-                            };
-                            const s = styles[cleaningStatus] || styles.planned;
-                            return (
-                              <div style={{
-                                position: 'absolute',
-                                bottom: 4, left: '50%',
-                                transform: 'translateX(-50%)',
-                                zIndex: 15,
-                                pointerEvents: 'none',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '3px',
-                                backgroundColor: s.bg,
-                                border: `1.5px solid ${s.border}`,
-                                borderRadius: '10px',
-                                padding: '2px 7px',
-                                fontSize: '0.7rem',
-                                fontWeight: 700,
-                                color: s.color,
-                                whiteSpace: 'nowrap',
-                                boxShadow: '0 1px 4px rgba(0,0,0,0.18)',
-                              }}>
-                                {s.label}
-                              </div>
-                            );
-                          })()}
-
-                        </div>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
-      </div>
 
-      {/* Legend */}
-      <div className="flex gap-5 text-xs text-gray-500 flex-wrap items-center">
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded inline-block" style={{ backgroundColor: '#1d4ed8' }}></span> Bestätigt</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded inline-block" style={{ backgroundColor: '#16a34a' }}></span> Eingecheckt</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded inline-block" style={{ backgroundColor: '#9ca3af' }}></span> Ausgecheckt</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded inline-block" style={{ backgroundColor: '#f59e0b' }}></span> Angefragt</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded inline-block" style={{ backgroundColor: '#475569' }}></span> 🔒 Eigentümer gesperrt</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded inline-block" style={{ backgroundColor: 'rgba(239,68,68,0.3)', border: '1px solid #ef4444' }}></span> 🧹 Geplant</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded inline-block" style={{ backgroundColor: 'rgba(251,191,36,0.4)', border: '1px solid #f59e0b' }}></span> 🧹 Organisiert</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded inline-block" style={{ backgroundColor: 'rgba(34,197,94,0.3)', border: '1px solid #22c55e' }}></span> 🧹 Erledigt</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded inline-block" style={{ backgroundColor: '#bfdbfe', border: '1px solid #3b82f6' }}></span> Heute</span>
-        <span className="text-gray-400 ml-3">◁ = Abreise &nbsp;|&nbsp; ▷ = Anreise &nbsp;|&nbsp; Leere Zelle klicken = Reinigung markieren</span>
-      </div>
+        {/* ── Legend ── */}
+        <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-gray-500">
+          {Object.entries(STATUS_META).map(([k, m]) => (
+            <span key={k} className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: m.bg }} />
+              {m.label}
+            </span>
+          ))}
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-sm inline-block bg-red-200 border border-red-400" />
+            🧹 Reinigung geplant
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-sm inline-block bg-amber-200 border border-amber-400" />
+            🧹 Organisiert
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-sm inline-block bg-green-200 border border-green-400" />
+            🧹 Erledigt
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-sm inline-block bg-blue-200 border border-blue-500" />
+            Heute
+          </span>
+          <span className="text-gray-400 ml-2">· Leere Zelle klicken = Reinigung markieren</span>
+        </div>
 
-      {/* ── Mini overview calendars, one per house ── */}
-      <MiniOverview houses={houses} navigate={navigate} cleaningMarkers={cleaningMarkers} />
+        {/* ── Mini overview section ── */}
+        <MiniOverview houses={houses} navigate={navigate} cleaningMarkers={cleaningMarkers} />
+      </div>
 
       {/* ── Cleaning Modal ── */}
       {cleaningModal && (
         <div
-          style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)' }}
+          style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}
           onClick={() => setCleaningModal(null)}
         >
-          <div
-            className="card"
-            style={{ minWidth: '320px', maxWidth: '400px', padding: '24px' }}
-            onClick={e => e.stopPropagation()}
-          >
-            <h3 className="text-base font-semibold text-gray-900 mb-2">
-              🧹 Reinigung – {cleaningModal.houseName}
-            </h3>
-            <p className="text-sm text-gray-600 mb-4">
-              {cleaningModal.date}
-            </p>
+          <div className="card" style={{ minWidth: 320, maxWidth: 400, padding: 24 }} onClick={e => e.stopPropagation()}>
+            <h3 className="text-base font-semibold text-gray-900 mb-1">🧹 Reinigung – {cleaningModal.houseName}</h3>
+            <p className="text-sm text-gray-500 mb-4">{cleaningModal.date}</p>
             {cleaningModal.alreadySet ? (
               <>
-                <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-4">
-                  Dieser Tag ist bereits als Reinigungstag markiert.
-                </p>
+                <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-4">Bereits als Reinigungstag markiert.</p>
                 <div className="flex gap-3 justify-end">
                   <button className="btn-secondary text-sm" onClick={() => setCleaningModal(null)}>Abbrechen</button>
-                  <button
-                    className="btn-primary text-sm bg-red-600 hover:bg-red-700"
-                    onClick={() => { toggleCleaning(cleaningModal.houseId, cleaningModal.date); setCleaningModal(null); }}
-                  >
-                    🗑 Markierung entfernen
-                  </button>
+                  <button className="btn-primary text-sm bg-red-600 hover:bg-red-700" onClick={() => { toggleCleaning(cleaningModal.houseId, cleaningModal.date); setCleaningModal(null); }}>🗑 Markierung entfernen</button>
                 </div>
               </>
             ) : (
               <>
-                <p className="text-sm text-gray-600 mb-4">
-                  Soll dieser Tag als Reinigungstag markiert werden? Er wird dann orange im Kalender hervorgehoben.
-                </p>
+                <p className="text-sm text-gray-600 mb-4">Soll dieser Tag als Reinigungstag markiert werden?</p>
                 <div className="flex gap-3 justify-end">
                   <button className="btn-secondary text-sm" onClick={() => setCleaningModal(null)}>Abbrechen</button>
-                  <button
-                    className="btn-primary text-sm"
-                    style={{ backgroundColor: '#f59e0b', borderColor: '#f59e0b' }}
-                    onClick={() => { toggleCleaning(cleaningModal.houseId, cleaningModal.date); setCleaningModal(null); }}
-                  >
-                    🧹 Als Reinigungstag markieren
-                  </button>
+                  <button className="btn-primary text-sm" style={{ backgroundColor: '#f59e0b', borderColor: '#f59e0b' }} onClick={() => { toggleCleaning(cleaningModal.houseId, cleaningModal.date); setCleaningModal(null); }}>🧹 Reinigungstag markieren</button>
                 </div>
               </>
             )}
@@ -505,70 +415,47 @@ export default function CalendarPage() {
   );
 }
 
-// ── Mini multi-month grid calendar per house ──────────────────────────────────
+// ── Mini overview ─────────────────────────────────────────────────────────────
+const MINI_DAY_NAMES_SHORT = ['M','D','M','D','F','S','S'];
 
-const MINI_DAY_NAMES_SHORT = ['M','D','M','D','F','S','S']; // Mon-Sun
-
-function toMonthValue(y, m) {
-  return `${y}-${String(m + 1).padStart(2, '0')}`;
-}
-function fromMonthValue(val) {
-  const [y, m] = val.split('-');
-  return { y: parseInt(y), m: parseInt(m) - 1 };
-}
+function toMonthValue(y, m) { return `${y}-${String(m + 1).padStart(2, '0')}`; }
+function fromMonthValue(val) { const [y, m] = val.split('-'); return { y: parseInt(y), m: parseInt(m) - 1 }; }
 
 function MiniOverview({ houses, navigate, cleaningMarkers }) {
   const now = new Date();
   const [fromVal, setFromVal] = useState(toMonthValue(now.getFullYear(), now.getMonth()));
-  const [toVal, setToVal]   = useState(toMonthValue(now.getFullYear(), Math.min(now.getMonth() + 5, 11)));
+  const [toVal,   setToVal]   = useState(toMonthValue(now.getFullYear(), Math.min(now.getMonth() + 5, 11)));
   const [allBookings, setAllBookings] = useState([]);
 
   const fromParsed = fromMonthValue(fromVal);
   const toParsed   = fromMonthValue(toVal);
 
-  // Build list of months between from and to
   const months = [];
   let cy = fromParsed.y, cm = fromParsed.m;
   while (cy < toParsed.y || (cy === toParsed.y && cm <= toParsed.m)) {
     months.push({ y: cy, m: cm });
-    cm++;
-    if (cm > 11) { cm = 0; cy++; }
+    cm++; if (cm > 11) { cm = 0; cy++; }
     if (months.length > 24) break;
   }
 
   useEffect(() => {
     if (!months.length) return;
-    const first = months[0];
-    const last  = months[months.length - 1];
+    const first = months[0], last = months[months.length - 1];
     const from = dateStr(first.y, first.m, 1);
-    const to   = dateStr(last.y,  last.m,  getDaysInMonth(last.y, last.m));
-    api.get('/bookings', { params: { from, to, limit: 500 } })
-      .then(r => setAllBookings(r.data.data || []));
+    const to   = dateStr(last.y, last.m, getDaysInMonth(last.y, last.m));
+    api.get('/bookings', { params: { from, to, limit: 500 } }).then(r => setAllBookings(r.data.data || []));
   }, [fromVal, toVal]);
 
   return (
-    <div className="space-y-3" id="mini-overview-print">
+    <div className="mt-6 space-y-4" id="mini-overview-print">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h2 className="text-base font-semibold text-gray-700">Belegungsübersicht je Haus</h2>
+        <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wider">Monatsübersicht je Haus</h2>
         <div className="flex items-center gap-2 text-sm">
-          <button
-            className="no-print btn btn-secondary text-xs py-1 px-3"
-            onClick={() => window.print()}
-          >PDF exportieren</button>
-          <label className="text-gray-500 text-xs">Von</label>
-          <input
-            type="month"
-            className="form-select text-sm py-1 px-2"
-            value={fromVal}
-            onChange={e => setFromVal(e.target.value)}
-          />
-          <label className="text-gray-500 text-xs">Bis</label>
-          <input
-            type="month"
-            className="form-select text-sm py-1 px-2"
-            value={toVal}
-            onChange={e => setToVal(e.target.value)}
-          />
+          <button className="no-print btn btn-secondary text-xs py-1 px-3" onClick={() => window.print()}>PDF exportieren</button>
+          <label className="text-gray-400 text-xs">Von</label>
+          <input type="month" className="form-select text-sm py-1 px-2" value={fromVal} onChange={e => setFromVal(e.target.value)} />
+          <label className="text-gray-400 text-xs">Bis</label>
+          <input type="month" className="form-select text-sm py-1 px-2" value={toVal} onChange={e => setToVal(e.target.value)} />
         </div>
       </div>
       <div className="grid grid-cols-3 gap-4">
@@ -589,8 +476,10 @@ function MiniOverview({ houses, navigate, cleaningMarkers }) {
 
 function HouseMiniCal({ house, months, bookings, navigate, cleaningMarkers }) {
   return (
-    <div className="card p-4 space-y-4">
-      <div className="font-semibold text-gray-800 text-sm">{house.name} <span className="text-gray-400 font-normal text-xs">· {house.capacity} Betten</span></div>
+    <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-4 shadow-sm">
+      <div className="font-semibold text-gray-800 text-sm">{house.name}
+        <span className="text-gray-400 font-normal text-xs ml-1">· {house.capacity} Betten</span>
+      </div>
       <div className="space-y-4">
         {months.map(({ y, m }) => (
           <MiniMonth key={`${y}-${m}`} year={y} month={m} bookings={bookings} navigate={navigate} houseId={house.id} cleaningMarkers={cleaningMarkers} />
@@ -606,53 +495,35 @@ function MiniMonth({ year, month, bookings, navigate, houseId, cleaningMarkers }
 
   const occ = {};
   bookings.forEach(b => {
-    const ci = b.checkin_date?.slice(0, 10);
-    const co = b.checkout_date?.slice(0, 10);
+    const ci = b.checkin_date?.slice(0,10), co = b.checkout_date?.slice(0,10);
     if (!ci || !co) return;
-    let cur = new Date(ci);
-    const end = new Date(co);
-    while (cur < end) {
-      occ[cur.toISOString().slice(0, 10)] = b;
-      cur.setDate(cur.getDate() + 1);
-    }
+    let cur = new Date(ci), end = new Date(co);
+    while (cur < end) { occ[cur.toISOString().slice(0,10)] = b; cur.setDate(cur.getDate() + 1); }
     occ[co] = occ[co] || { _checkoutOnly: true, ...b };
   });
 
-  // Build cleaning set for this house+month
-  // Sources: booking.cleaning_date (if cleaning_required), cleaning_markers, booking_tasks.cleaning_done
   const cleaningDays = new Set();
   let taskStore = {};
   try { taskStore = JSON.parse(localStorage.getItem('booking_tasks') || '{}'); } catch {}
   bookings.forEach(b => {
     if (b.cleaning_required === false) return;
-    const cd = b.cleaning_date?.slice(0, 10);
-    if (!cd) return;
-    // Show if planned OR if done via task
-    const bt = taskStore[b.id] || {};
-    if (cd || bt.cleaning_done) cleaningDays.add(cd);
+    const cd = b.cleaning_date?.slice(0,10);
+    if (cd) cleaningDays.add(cd);
   });
   Object.keys(cleaningMarkers).forEach(key => {
-    if (key.startsWith(`${houseId}_`)) {
-      cleaningDays.add(key.slice(`${houseId}_`.length));
-    }
+    if (key.startsWith(`${houseId}_`)) cleaningDays.add(key.slice(`${houseId}_`.length));
   });
 
-  const cells = [
-    ...Array(firstDow).fill(null),
-    ...Array.from({ length: dim }, (_, i) => i + 1),
-  ];
+  const cells = [...Array(firstDow).fill(null), ...Array.from({ length: dim }, (_, i) => i + 1)];
   while (cells.length % 7 !== 0) cells.push(null);
-
   const weeks = [];
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date().toISOString().slice(0,10);
 
   return (
     <div>
-      <div className="text-xs font-semibold text-gray-500 mb-1">
-        {MONTH_NAMES[month]} {year}
-      </div>
+      <div className="text-xs font-semibold text-gray-500 mb-1">{MONTH_NAMES[month]} {year}</div>
       <table className="w-full border-collapse" style={{ tableLayout: 'fixed' }}>
         <thead>
           <tr>
@@ -671,56 +542,29 @@ function MiniMonth({ year, month, bookings, navigate, houseId, cleaningMarkers }
                 const isCheckin  = booking && booking.checkin_date?.slice(0,10) === d;
                 const isCheckout = booking && booking.checkout_date?.slice(0,10) === d;
                 const isMid      = booking && !isCheckin && !isCheckout;
-                const isToday    = d === today;
+                const isCurrentDay = d === today;
                 const isCleaning = cleaningDays.has(d);
                 const color = booking ? getColor(booking.status) : null;
-
                 return (
-                  <td
-                    key={di}
-                    style={{
-                      padding: '1px',
-                      height: '18px',
-                      position: 'relative',
-                      cursor: booking ? 'pointer' : 'default',
-                      backgroundColor: isCleaning ? '#fef9c3' : undefined,
-                    }}
-                    title={
-                      isCleaning
-                        ? `🧹 Reinigung · ${d}`
-                        : booking
-                          ? `${booking.guest_name} · ${booking.checkin_date?.slice(0,10)} → ${booking.checkout_date?.slice(0,10)}`
-                          : undefined
-                    }
+                  <td key={di} style={{ padding: '1px', height: 18, position: 'relative', cursor: booking ? 'pointer' : 'default', backgroundColor: isCleaning ? '#fef9c3' : undefined }}
+                    title={isCleaning ? `🧹 Reinigung · ${d}` : booking ? `${booking.guest_name} · ${booking.checkin_date?.slice(0,10)} → ${booking.checkout_date?.slice(0,10)}` : undefined}
                     onClick={() => booking && navigate(`/bookings/${booking.id}/edit`)}
                   >
-                    {/* Day number */}
                     <div style={{
-                      position: 'relative',
-                      height: '16px',
+                      position: 'relative', height: 16,
                       borderRadius: isMid ? 0 : isCheckin ? '0 3px 3px 0' : '3px 0 0 3px',
                       overflow: 'hidden',
-                      outline: isToday ? '2px solid #3b82f6' : isCleaning ? '1.5px solid #f59e0b' : 'none',
-                      backgroundColor: isToday && !isMid ? '#bfdbfe' : undefined,
+                      outline: isCurrentDay ? '2px solid #3b82f6' : isCleaning ? '1.5px solid #f59e0b' : 'none',
                       outlineOffset: '-1px',
                     }}>
-                      {isMid && (
-                        <div style={{ position: 'absolute', inset: 0, backgroundColor: color }} />
-                      )}
-                      {isCheckin && (
-                        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top left, #22c55e 50%, transparent 50%)' }} />
-                      )}
-                      {isCheckout && (
-                        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom right, #ef4444 50%, transparent 50%)' }} />
-                      )}
+                      {isMid && <div style={{ position: 'absolute', inset: 0, backgroundColor: color }} />}
+                      {isCheckin && <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top left, #22c55e 50%, transparent 50%)' }} />}
+                      {isCheckout && <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom right, #ef4444 50%, transparent 50%)' }} />}
                       <div style={{
-                        position: 'relative',
-                        zIndex: 1,
-                        textAlign: 'center',
-                        fontSize: '0.6rem',
-                        lineHeight: '16px',
-                        fontWeight: isToday ? 700 : 400,
-                        color: isMid ? 'rgba(255,255,255,0.9)' : isToday ? '#1d4ed8' : isCleaning ? '#b45309' : '#6b7280',
+                        position: 'relative', zIndex: 1, textAlign: 'center',
+                        fontSize: '0.6rem', lineHeight: '16px',
+                        fontWeight: isCurrentDay ? 700 : 400,
+                        color: isMid ? 'rgba(255,255,255,0.9)' : isCurrentDay ? '#1d4ed8' : isCleaning ? '#b45309' : '#6b7280',
                       }}>
                         {isCleaning && !isMid ? '🧹' : isMid && booking?.daily_rate > 0 ? Math.round(booking.daily_rate) : day}
                       </div>

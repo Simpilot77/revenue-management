@@ -138,9 +138,123 @@ function dueStatus(dueDate, isDone) {
   return          { label: `Fällig ${fmtDate(dueDate)}`,              cls: 'text-gray-400' };
 }
 
+// ─── Booking Detail Modal (shown when clicking a HouseStatusCard) ─────────────
+
+function BookingDetailModal({ booking, house, title, onClose }) {
+  if (!booking) return null;
+  const checkin  = booking.checkin_date?.slice(0, 10);
+  const checkout = booking.checkout_date?.slice(0, 10);
+  const today    = new Date().toISOString().slice(0, 10);
+  const daysIn   = daysBetween(checkin, today);
+  const daysOut  = daysBetween(today, checkout);
+
+  const statusColors = {
+    eingecheckt: 'bg-green-100 text-green-800',
+    ausgecheckt: 'bg-gray-100 text-gray-700',
+    bestaetigt:  'bg-blue-100 text-blue-800',
+    angefragt:   'bg-amber-100 text-amber-800',
+    gesperrt:    'bg-slate-100 text-slate-700',
+  };
+  const statusLabels = {
+    eingecheckt: 'Eingecheckt', ausgecheckt: 'Ausgecheckt',
+    bestaetigt: 'Bestätigt', angefragt: 'Angefragt', gesperrt: 'Gesperrt',
+  };
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full mx-4"
+        style={{ maxWidth: 480 }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="bg-gradient-to-br from-blue-700 to-blue-900 rounded-t-2xl px-6 py-5 text-white relative">
+          <button onClick={onClose} className="absolute top-4 right-4 text-white/70 hover:text-white text-xl leading-none">✕</button>
+          <div className="text-xs font-semibold opacity-70 uppercase tracking-wider mb-1">{house.name} · {title}</div>
+          <div className="text-xl font-bold">{booking.guest_name}</div>
+          {booking.company_name && <div className="text-sm opacity-80 mt-0.5">{booking.company_name}</div>}
+          <div className={`mt-3 inline-flex items-center text-xs font-semibold px-3 py-1 rounded-full ${statusColors[booking.status] || 'bg-white/20 text-white'}`}>
+            {statusLabels[booking.status] || booking.status}
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 space-y-3">
+          {/* Dates */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-gray-50 rounded-xl p-3">
+              <div className="text-xs text-gray-400 mb-1">Check-in</div>
+              <div className="text-sm font-semibold text-gray-800">{fmtDateFull(checkin)}</div>
+              {daysIn >= 0 && daysIn < 30 && (
+                <div className="text-xs text-green-600 mt-0.5">{daysIn === 0 ? 'Heute' : `Vor ${daysIn} Tag${daysIn !== 1 ? 'en' : ''}`}</div>
+              )}
+            </div>
+            <div className="bg-gray-50 rounded-xl p-3">
+              <div className="text-xs text-gray-400 mb-1">Check-out</div>
+              <div className="text-sm font-semibold text-gray-800">{fmtDateFull(checkout)}</div>
+              {daysOut >= 0 && daysOut < 30 && (
+                <div className={`text-xs mt-0.5 ${daysOut === 0 ? 'text-red-600' : daysOut === 1 ? 'text-amber-600' : 'text-gray-500'}`}>
+                  {daysOut === 0 ? 'Heute' : daysOut === 1 ? 'Morgen' : `in ${daysOut} Tagen`}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Key details */}
+          <div className="space-y-2">
+            {[
+              ['Nächte',       booking.nights ? `${booking.nights} Nächte` : '—'],
+              ['Personen',     booking.guest_count ? `${booking.guest_count} Person${booking.guest_count !== 1 ? 'en' : ''}` : '—'],
+              ['Gesamtpreis',  formatCurrency(booking.total_price)],
+              booking.invoice_number && ['Rechnungsnr.', booking.invoice_number],
+              booking.channel && ['Kanal', booking.channel],
+              booking.booking_date && ['Buchungsdatum', booking.booking_date.slice(0, 10)],
+            ].filter(Boolean).map(([label, value]) => (
+              <div key={label} className="flex justify-between items-center text-sm">
+                <span className="text-gray-400">{label}</span>
+                <span className="font-medium text-gray-800">{value}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Payment / deposit status */}
+          {(booking.payment_status || booking.deposit_taken) && (
+            <div className="border-t border-gray-100 pt-3 flex gap-2 flex-wrap">
+              {booking.payment_status && (
+                <span className={`text-xs font-medium px-2 py-1 rounded-full
+                  ${booking.payment_status === 'bezahlt' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                  💶 {booking.payment_status}
+                </span>
+              )}
+              {booking.deposit_taken && !booking.deposit_returned && (
+                <span className="text-xs font-medium px-2 py-1 rounded-full bg-blue-100 text-blue-700">🔒 Kaution hinterlegt</span>
+              )}
+              {booking.deposit_returned && (
+                <span className="text-xs font-medium px-2 py-1 rounded-full bg-gray-100 text-gray-600">✓ Kaution zurück</span>
+              )}
+            </div>
+          )}
+
+          {/* Notes */}
+          {booking.notes && (
+            <div className="bg-amber-50 rounded-xl px-4 py-3 text-sm text-amber-900">
+              <div className="text-xs font-semibold text-amber-600 mb-1">Notiz</div>
+              {booking.notes}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── House Status Card ────────────────────────────────────────────────────────
 
 function HouseStatusCard({ house, bookings }) {
+  const [detailOpen, setDetailOpen] = useState(false);
   const today = new Date().toISOString().slice(0, 10);
   const activeStatuses = ['bestaetigt', 'eingecheckt', 'ausgecheckt'];
 
@@ -235,9 +349,24 @@ function HouseStatusCard({ house, bookings }) {
   }
 
   const activeBooking = currentBooking || inquiryToday;
+  // The booking to show in the detail modal: current if occupied, otherwise next
+  const detailBooking = activeBooking || nextBooking;
+  const detailTitle   = activeBooking ? (occupied ? 'Aktuelle Buchung' : 'Angefragt') : 'Nächste Buchung';
 
   return (
-    <div className="rounded-2xl overflow-hidden shadow-md ring-1 ring-gray-200">
+    <>
+    {detailOpen && detailBooking && (
+      <BookingDetailModal
+        booking={detailBooking}
+        house={house}
+        title={detailTitle}
+        onClose={() => setDetailOpen(false)}
+      />
+    )}
+    <div
+      className="rounded-2xl overflow-hidden shadow-md ring-1 ring-gray-200 cursor-pointer hover:ring-blue-300 hover:shadow-lg transition-shadow"
+      onClick={() => detailBooking && setDetailOpen(true)}
+    >
       {/* Gradient header – always blue */}
       <div className="bg-gradient-to-br from-blue-700 to-blue-900 p-5 text-white relative">
         <div className="flex items-start justify-between">
@@ -346,6 +475,7 @@ function HouseStatusCard({ house, bookings }) {
         )}
       </div>
     </div>
+    </>
   );
 }
 
