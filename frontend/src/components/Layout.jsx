@@ -7,6 +7,7 @@ const navItems = [
   { to: '/calendar', label: 'Kalender', icon: '📅' },
   { to: '/tasks', label: 'Aufgaben', icon: '☑️' },
   { to: '/cleaning', label: 'Reinigung', icon: '🧹' },
+  { to: '/invoices', label: 'Rechnungen', icon: '🧾' },
   { to: '/reports', label: 'Auswertungen', icon: '📈' },
   { to: '/customers', label: 'Kunden', icon: '👤' },
   { to: '/settings', label: 'Einstellungen', icon: '⚙️' },
