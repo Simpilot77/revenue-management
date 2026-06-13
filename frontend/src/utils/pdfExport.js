@@ -1035,6 +1035,7 @@ export async function exportBookingsOverview(bookings, channels, year) {
     r.house_short || '—',
     r.guest_name + (r.company_name ? `\n${r.company_name}` : ''),
     r.channel_short || '—',
+    r.booking_date?.slice(0,10) || '—',
     r.checkin_date?.slice(0,10) || '—',
     r.checkout_date?.slice(0,10) || '—',
     String(r.nights ?? '—'),
@@ -1047,26 +1048,27 @@ export async function exportBookingsOverview(bookings, channels, year) {
 
   autoTable(doc, {
     startY: 30,
-    head: [['Rechnungsnr.','Haus','Gast','Kanal','Check-in','Check-out','N','Status','Brutto','Komm %','Komm €','Netto']],
+    head: [['Rechnungsnr.','Haus','Gast','Kanal','Buchungsdatum','Check-in','Check-out','N','Status','Brutto','Komm %','Komm €','Netto']],
     body: rows,
-    foot: [['', '', `Gesamt (${mapped.length} Buchungen)`, '', '', '', '', '', fmt(totalGross), '', fmt(totalComm), fmt(totalNet)]],
+    foot: [['', '', `Gesamt (${mapped.length} Buchungen)`, '', '', '', '', '', '', fmt(totalGross), '', fmt(totalComm), fmt(totalNet)]],
     styles: { fontSize: 7.5, cellPadding: [2,2,2,2], textColor: DARK, overflow: 'linebreak' },
     headStyles: { fillColor: BLUE, textColor: [255,255,255], fontStyle: 'bold', fontSize: 7.5 },
     footStyles: { fillColor: [240,240,240], fontStyle: 'bold', fontSize: 8 },
     alternateRowStyles: { fillColor: LIGHT },
     columnStyles: {
-      0: { cellWidth: 26, fontStyle: 'bold' },
-      1: { cellWidth: 12 },
-      2: { cellWidth: 40 },
-      3: { cellWidth: 18 },
+      0: { cellWidth: 24, fontStyle: 'bold' },
+      1: { cellWidth: 10 },
+      2: { cellWidth: 36 },
+      3: { cellWidth: 16 },
       4: { cellWidth: 20 },
-      5: { cellWidth: 20 },
-      6: { cellWidth: 8, halign: 'center' },
-      7: { cellWidth: 22 },
-      8: { cellWidth: 22, halign: 'right' },
-      9: { cellWidth: 14, halign: 'right' },
-      10: { cellWidth: 20, halign: 'right' },
-      11: { cellWidth: 22, halign: 'right', fontStyle: 'bold' },
+      5: { cellWidth: 18 },
+      6: { cellWidth: 18 },
+      7: { cellWidth: 8, halign: 'center' },
+      8: { cellWidth: 20 },
+      9: { cellWidth: 20, halign: 'right' },
+      10: { cellWidth: 13, halign: 'right' },
+      11: { cellWidth: 18, halign: 'right' },
+      12: { cellWidth: 20, halign: 'right', fontStyle: 'bold' },
     },
     margin: { left: 10, right: 10, top: 30 },
     didDrawPage: (data) => {
@@ -1075,10 +1077,10 @@ export async function exportBookingsOverview(bookings, channels, year) {
     didParseCell: (cell) => {
       if (cell.section === 'body') {
         const r = mapped[cell.row.index];
-        if (cell.column.index === 11) {
+        if (cell.column.index === 12) {
           cell.cell.styles.textColor = [0, 100, 0];
         }
-        if (cell.column.index === 10 && r?.commAmt > 0) {
+        if (cell.column.index === 11 && r?.commAmt > 0) {
           cell.cell.styles.textColor = [180, 0, 0];
         }
       }

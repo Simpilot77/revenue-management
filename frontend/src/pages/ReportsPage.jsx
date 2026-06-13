@@ -605,7 +605,7 @@ export default function ReportsPage() {
                       <table className="w-full text-sm">
                         <thead className="bg-gray-50 border-b">
                           <tr>
-                            {['Rechnungsnr.','Haus','Gast','Kanal','Check-in','Check-out','Nächte','Status','Brutto','Komm. %','Komm. €','Netto'].map(h => (
+                            {['Rechnungsnr.','Haus','Gast','Kanal','Buchungsdatum','Check-in','Check-out','Nächte','Status','Brutto','Komm. %','Komm. €','Netto'].map(h => (
                               <th key={h} className="text-left text-gray-500 font-medium px-3 py-3 whitespace-nowrap">{h}</th>
                             ))}
                           </tr>
@@ -625,6 +625,7 @@ export default function ReportsPage() {
                                   <span>{r.channel_short || '—'}</span>
                                 </span>
                               </td>
+                              <td className="px-3 py-2 whitespace-nowrap text-gray-500 text-xs">{r.booking_date?.slice(0,10) || <span className="text-gray-300">—</span>}</td>
                               <td className="px-3 py-2 whitespace-nowrap">{r.checkin_date?.slice(0,10)}</td>
                               <td className="px-3 py-2 whitespace-nowrap">{r.checkout_date?.slice(0,10)}</td>
                               <td className="px-3 py-2 text-center">{r.nights}</td>
@@ -645,7 +646,7 @@ export default function ReportsPage() {
                         </tbody>
                         <tfoot className="bg-gray-50 border-t font-semibold">
                           <tr>
-                            <td colSpan={8} className="px-3 py-3 text-gray-600">Gesamt ({rows.length} Buchungen)</td>
+                            <td colSpan={9} className="px-3 py-3 text-gray-600">Gesamt ({rows.length} Buchungen)</td>
                             <td className="px-3 py-3 text-right">{formatCurrency(totalGross)}</td>
                             <td></td>
                             <td className="px-3 py-3 text-right text-red-600">{formatCurrency(totalComm)}</td>
