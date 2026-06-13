@@ -227,7 +227,9 @@ function HouseStatusCard({ house, bookings }) {
     statusIcon    = '🧹';
     buttonClass   = 'bg-amber-400 border-white/30 text-white';
   } else {
-    statusLabel   = 'Fertig für Vermietung';
+    statusLabel   = daysUntilNext !== null
+      ? `Frei – Ankunft in ${daysUntilNext === 0 ? 'heute' : daysUntilNext === 1 ? '1 Tag' : `${daysUntilNext} Tagen`}`
+      : 'Frei';
     statusIcon    = '✅';
     buttonClass   = 'bg-emerald-500 border-white/30 text-white';
   }
@@ -252,10 +254,14 @@ function HouseStatusCard({ house, bookings }) {
         </div>
 
         {/* Dates overlay */}
-        {activeBooking && (
+        {activeBooking ? (
           <div className="absolute bottom-3 right-4 text-xs opacity-80 text-right">
             <div>📅 {fmtDateFull(activeBooking.checkin_date)}</div>
             <div>🏁 {fmtDateFull(activeBooking.checkout_date)}</div>
+          </div>
+        ) : nextBooking && (
+          <div className="absolute bottom-3 right-4 text-xs opacity-80 text-right">
+            <div>📅 Ankunft: {fmtDateFull(nextBooking.checkin_date)}</div>
           </div>
         )}
       </div>
@@ -302,30 +308,42 @@ function HouseStatusCard({ house, bookings }) {
           <>
             <Row label="Status">
               <span className={`text-sm font-semibold ${cleaningDone ? 'text-emerald-600' : 'text-amber-600'}`}>
-                {cleaningDone ? '🏡 Haus frei für Vermietung' : 'Reinigung erforderlich'}
+                {cleaningDone ? '🏡 Frei' : 'Reinigung erforderlich'}
               </span>
             </Row>
-            <Row label="Reinigung">
-              <span className="text-xs font-medium rounded-full px-2 py-0.5 bg-emerald-100 text-emerald-700">✅ Reinigung erledigt</span>
-            </Row>
+            {!cleaningDone && (
+              <Row label="Reinigung">
+                <span className="text-xs font-medium rounded-full px-2 py-0.5 bg-amber-100 text-amber-700">⚠ Noch ausstehend</span>
+              </Row>
+            )}
+            {nextBooking && (
+              <Row label="Ankunft">
+                <span className="text-sm font-medium text-blue-700">{fmtDateFull(nextBooking.checkin_date)}</span>
+                <span className={`text-xs rounded-full px-2 py-0.5 ml-1 ${daysUntilNext === 0 ? 'bg-amber-100 text-amber-700' : 'bg-blue-50 text-blue-500'}`}>
+                  {daysUntilNext === 0 ? 'Heute' : daysUntilNext === 1 ? 'Morgen' : `in ${daysUntilNext} Tagen`}
+                </span>
+              </Row>
+            )}
           </>
         )}
 
-        <div className="border-t border-gray-100 pt-3">
-          {nextBooking ? (
-            <Row label="Nächste">
-              <div className="min-w-0">
-                <span className="text-sm font-medium text-gray-800 truncate block">{nextBooking.guest_name}</span>
-                <span className="text-xs text-gray-500">
-                  {fmtDateFull(nextBooking.checkin_date)}
-                  {daysUntilNext === 0 ? ' (Heute)' : daysUntilNext === 1 ? ' (Morgen)' : ` (in ${daysUntilNext} Tagen)`}
-                </span>
-              </div>
-            </Row>
-          ) : (
-            <div className="text-xs text-gray-400 italic">Keine weiteren Buchungen geplant</div>
-          )}
-        </div>
+        {occupied && (
+          <div className="border-t border-gray-100 pt-3">
+            {nextBooking ? (
+              <Row label="Ankunft">
+                <div className="min-w-0">
+                  <span className="text-sm font-medium text-gray-800 truncate block">{nextBooking.guest_name}</span>
+                  <span className="text-xs text-gray-500">
+                    {fmtDateFull(nextBooking.checkin_date)}
+                    {daysUntilNext === 0 ? ' (Heute)' : daysUntilNext === 1 ? ' (Morgen)' : ` (in ${daysUntilNext} Tagen)`}
+                  </span>
+                </div>
+              </Row>
+            ) : (
+              <div className="text-xs text-gray-400 italic">Keine weiteren Buchungen geplant</div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -152,6 +152,21 @@ export default function InvoicePreviewModal({ data, onClose, onLangChange, onCha
                 <F label="Ort" field="billing_city" />
               </div>
               <F label="Land" field="billing_country" />
+              <div className="md:col-span-2">
+                <label className="block text-xs font-medium text-gray-500 mb-1">
+                  Adresse Freitext <span className="text-gray-400 font-normal">(optional – überschreibt die Felder oben auf der Rechnung)</span>
+                </label>
+                <textarea
+                  className="form-input text-sm w-full font-mono"
+                  rows={4}
+                  value={data.billing_address_freetext || ''}
+                  onChange={e => set('billing_address_freetext', e.target.value)}
+                  placeholder={'z. B.:\nMusterfirma GmbH\nMusterstraße 12\n12345 Musterstadt\nDeutschland'}
+                />
+                {data.billing_address_freetext && (
+                  <p className="text-xs text-blue-600 mt-1">✓ Freitext aktiv – Adressfelder oben werden auf der Rechnung ignoriert.</p>
+                )}
+              </div>
             </div>
           </section>
 

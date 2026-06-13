@@ -500,10 +500,15 @@ export async function exportInvoiceFromData(data) {
   if (data.company_name && !data.co_line) { doc.text(data.company_name, 25, ry); ry += 6; }
   if (data.guest_name)      { doc.text(data.guest_name,   25, ry); ry += 6; }
   if (data.co_line)         { doc.text(data.co_line,      25, ry); ry += 6; }
-  if (data.billing_street)  { doc.text(data.billing_street, 25, ry); ry += 6; }
-  const zipCity = `${data.billing_zip || ''} ${data.billing_city || ''}`.trim();
-  if (zipCity) { doc.text(zipCity, 25, ry); ry += 6; }
-  if (data.billing_country) { doc.text(data.billing_country, 25, ry); }
+  if (data.billing_address_freetext) {
+    const lines = data.billing_address_freetext.split('\n').filter(l => l.trim());
+    lines.forEach(line => { doc.text(line, 25, ry); ry += 6; });
+  } else {
+    if (data.billing_street)  { doc.text(data.billing_street, 25, ry); ry += 6; }
+    const zipCity = `${data.billing_zip || ''} ${data.billing_city || ''}`.trim();
+    if (zipCity) { doc.text(zipCity, 25, ry); ry += 6; }
+    if (data.billing_country) { doc.text(data.billing_country, 25, ry); }
+  }
 
   // ── Meta block ──
   const metaLX = 122;
