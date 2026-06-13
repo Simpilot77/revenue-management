@@ -26,6 +26,53 @@ const DEFAULT_SETTINGS = {
   lodgify_api_key: '',
   lodgify_account_id: '',
   lodgify_house_map: '',
+  invoice_presets: {
+    salutations: [
+      {
+        name: 'Standard (Deutsch)',
+        salutation: 'Sehr geehrter Gast,',
+        intro_line1: 'vielen Dank für Ihren Aufenthalt bei Workation Wolfsburg.',
+        intro_line2: 'Gerne stellen wir Ihnen folgende Leistungen in Rechnung:',
+      },
+      {
+        name: 'Firma / Geschäftsreise',
+        salutation: 'Sehr geehrte Damen und Herren,',
+        intro_line1: 'vielen Dank für die Buchung unserer Unterkunft.',
+        intro_line2: 'Wir erlauben uns, Ihnen folgende Leistungen in Rechnung zu stellen:',
+      },
+    ],
+    payments: [
+      {
+        name: 'Standard 14 Tage',
+        text: 'Bitte überweisen Sie den Gesamtbetrag innerhalb von 14 Tagen auf das unten genannte Konto.',
+      },
+      {
+        name: 'Sofort fällig',
+        text: 'Der Rechnungsbetrag ist sofort nach Erhalt dieser Rechnung auf das unten genannte Konto zu überweisen.',
+      },
+    ],
+    agbs: [
+      {
+        name: 'Standard AGB',
+        agb1: 'Der Mietvertrag kommt erst mit dem vollständigen bzw. fristgerechten Eingang des Geldbetrages zustande.',
+        agb2: 'Es gelten die Hausordnung und unsere AGB\'s, welche unter www.workation-wolfsburg.com einsehbar sind.',
+      },
+    ],
+    closings: [
+      {
+        name: 'Standard',
+        closing_text: 'Wir freuen uns, Sie als Gäste willkommen heißen zu dürfen, und wünschen einen angenehmen Aufenthalt.',
+        closing: 'Mit freundlichen Grüßen,',
+        owner_name: 'Nils Flegel',
+      },
+      {
+        name: 'Englisch',
+        closing_text: 'We look forward to welcoming you and wish you a pleasant stay.',
+        closing: 'Kind regards,',
+        owner_name: 'Nils Flegel',
+      },
+    ],
+  },
 };
 
 function Section({ title, children }) {
@@ -42,6 +89,121 @@ function Field({ label, children }) {
     <div>
       <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
       {children}
+    </div>
+  );
+}
+
+// ─── Preset list manager ─────────────────────────────────────────────────────
+
+const PRESET_SCHEMAS = {
+  salutations: [
+    { key: 'salutation',  label: 'Anrede',               type: 'text' },
+    { key: 'intro_line1', label: 'Einleitungstext Zeile 1', type: 'textarea' },
+    { key: 'intro_line2', label: 'Einleitungstext Zeile 2', type: 'textarea' },
+  ],
+  payments: [
+    { key: 'text', label: 'Zahlungshinweis-Text', type: 'textarea' },
+  ],
+  agbs: [
+    { key: 'agb1', label: 'AGB Satz 1', type: 'textarea' },
+    { key: 'agb2', label: 'AGB Satz 2 (mit Website)', type: 'textarea' },
+  ],
+  closings: [
+    { key: 'closing_text', label: 'Schlusstext',       type: 'textarea' },
+    { key: 'closing',      label: 'Grußformel',         type: 'text' },
+    { key: 'owner_name',   label: 'Name (Unterschrift)', type: 'text' },
+  ],
+};
+
+const PRESET_SECTION_LABELS = {
+  salutations: '✉️ Anrede & Einleitung',
+  payments:    '💳 Zahlungshinweise',
+  agbs:        '📜 AGB-Texte',
+  closings:    '🤝 Abschluss-Texte',
+};
+
+function PresetManager({ type, presets = [], onChange }) {
+  const schema = PRESET_SCHEMAS[type] || [];
+  const [expanded, setExpanded] = useState(null); // index of expanded item
+
+  const addPreset = () => {
+    const empty = { name: `Vorlage ${presets.length + 1}`, ...Object.fromEntries(schema.map(f => [f.key, ''])) };
+    onChange([...presets, empty]);
+    setExpanded(presets.length);
+  };
+
+  const removePreset = (i) => {
+    onChange(presets.filter((_, idx) => idx !== i));
+    setExpanded(null);
+  };
+
+  const updatePreset = (i, key, value) => {
+    onChange(presets.map((p, idx) => idx === i ? { ...p, [key]: value } : p));
+  };
+
+  return (
+    <div className="space-y-2">
+      {presets.map((preset, i) => (
+        <div key={i} className="border border-slate-200 rounded-xl overflow-hidden">
+          {/* Header row */}
+          <div
+            className="flex items-center gap-3 px-4 py-2.5 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors"
+            onClick={() => setExpanded(expanded === i ? null : i)}
+          >
+            <span className="flex-1 text-sm font-medium text-slate-700">
+              {preset.name || `Vorlage ${i + 1}`}
+            </span>
+            <button
+              type="button"
+              className="text-xs px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded border border-red-200 font-medium"
+              onClick={e => { e.stopPropagation(); removePreset(i); }}
+            >
+              🗑 Löschen
+            </button>
+            <span className="text-slate-400 text-xs">{expanded === i ? '▲' : '▼'}</span>
+          </div>
+          {/* Expanded editor */}
+          {expanded === i && (
+            <div className="p-4 space-y-3 bg-white border-t border-slate-100">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Name der Vorlage</label>
+                <input
+                  className="form-input w-full"
+                  value={preset.name || ''}
+                  onChange={e => updatePreset(i, 'name', e.target.value)}
+                  placeholder="z.B. Standard, Firmenkunde, Englisch…"
+                />
+              </div>
+              {schema.map(field => (
+                <div key={field.key}>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{field.label}</label>
+                  {field.type === 'textarea' ? (
+                    <textarea
+                      className="form-input w-full text-sm"
+                      rows={3}
+                      value={preset[field.key] || ''}
+                      onChange={e => updatePreset(i, field.key, e.target.value)}
+                    />
+                  ) : (
+                    <input
+                      className="form-input w-full text-sm"
+                      value={preset[field.key] || ''}
+                      onChange={e => updatePreset(i, field.key, e.target.value)}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+      <button
+        type="button"
+        className="w-full py-2 text-sm text-blue-700 border border-blue-200 border-dashed rounded-xl bg-blue-50/50 hover:bg-blue-50 transition-colors font-medium"
+        onClick={addPreset}
+      >
+        + Neue Vorlage hinzufügen
+      </button>
     </div>
   );
 }
@@ -67,6 +229,11 @@ export default function SettingsPage() {
   const importRef = useRef(null);
 
   const set = (field, value) => setSettings(s => ({ ...s, [field]: value }));
+  const setPresets = (type, list) =>
+    setSettings(s => ({
+      ...s,
+      invoice_presets: { ...(s.invoice_presets || {}), [type]: list },
+    }));
   const setHouse = (houseId, field, value) =>
     setSettings(s => ({
       ...s,
@@ -224,6 +391,25 @@ export default function SettingsPage() {
                   />
                 </Field>
               </div>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      {/* 6b. Rechnungsvorlagen */}
+      <Section title="📝 Rechnungsvorlagen">
+        <p className="text-sm text-slate-600">
+          Lege hier Textvorlagen für Rechnungen an. In der Rechnungsvorschau kannst du eine Vorlage per Dropdown auswählen und mit einem Klick übernehmen.
+        </p>
+        <div className="space-y-5">
+          {Object.keys(PRESET_SCHEMAS).map(type => (
+            <div key={type}>
+              <div className="text-sm font-semibold text-slate-700 mb-2">{PRESET_SECTION_LABELS[type]}</div>
+              <PresetManager
+                type={type}
+                presets={settings.invoice_presets?.[type] || []}
+                onChange={list => setPresets(type, list)}
+              />
             </div>
           ))}
         </div>

@@ -415,6 +415,8 @@ export function buildInvoicePreviewData(booking, lang = 'de') {
     accommodation_sub_house: booking.house_name ? `Haus „${booking.house_name}"` : '',
     accommodation_sub_dates: `${fmtDate(booking.checkin_date)} – ${fmtDate(booking.checkout_date)} (${booking.nights} ${lang === 'de' ? 'Nächte' : 'nights'})`,
     accommodation_sub_persons: booking.guest_count ? (lang === 'de' ? `${booking.guest_count} Personen` : `${booking.guest_count} persons`) : '',
+    accommodation_qty: booking.nights || 1,
+    accommodation_unit_price: parseFloat(booking.daily_rate) || 0,
     cleaning_fee_desc: t.lineCleaning,
     cleaning_fee: cleaningFee,
     discount_desc: t.lineDiscount(discountPct),
@@ -552,8 +554,19 @@ export async function exportInvoiceFromData(data) {
   const discountPct = parseFloat(data.discount_pct || 0);
   const accomBrutto = bruttoTotal - cleaningFee * (1 + vatRate / 100);
 
+  const accomQty = parseFloat(data.accommodation_qty) || 1;
+  const accomUnitPrice = parseFloat(data.accommodation_unit_price) || 0;
+  const accomLineTotal = accomQty * accomUnitPrice;
+  const accomFallback = accomBrutto > 0 ? accomBrutto : bruttoTotal;
+  const accomDisplayTotal = accomLineTotal > 0 ? accomLineTotal : accomFallback;
+  const accomDisplayUnit = accomUnitPrice > 0 ? fmt(accomUnitPrice) : fmt(accomFallback);
+  const langCode = data.lang || 'de';
+  const accomQtyLabel = accomQty > 0
+    ? `${accomQty} ${langCode === 'en' ? 'nights' : 'Nächte'}`
+    : data.qty_unit;
+
   const tableBody = [
-    { pos: '1.', desc: data.accommodation_desc, qty: data.qty_unit, unit: fmt(accomBrutto > 0 ? accomBrutto : bruttoTotal), total: fmt(accomBrutto > 0 ? accomBrutto : bruttoTotal), isMainAccom: true },
+    { pos: '1.', desc: data.accommodation_desc, qty: accomQtyLabel, unit: accomDisplayUnit, total: fmt(accomDisplayTotal), isMainAccom: true },
     ...[data.accommodation_sub_house, data.accommodation_sub_dates, data.accommodation_sub_persons]
       .filter(Boolean)
       .map(line => ({ pos: '', desc: line, qty: '', unit: '', total: '', isSub: true })),
