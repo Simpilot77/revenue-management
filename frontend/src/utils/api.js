@@ -45,6 +45,42 @@ function enrichBookings(list) {
   return list;
 }
 
+// ── Manual overrides: fields the user edited manually, protected from import ──
+export const MANUAL_OVERRIDES_KEY = 'manual_overrides';
+
+// Fields that can be manually locked (Lodgify might overwrite these on import)
+const LOCKABLE_FIELDS = [
+  'invoice_number', 'status', 'payment_status',
+  'guest_name', 'company_name', 'total_price',
+  'checkin_date', 'checkout_date', 'nights', 'guest_count', 'booking_date',
+];
+
+function loadManualOverrides() {
+  try { return JSON.parse(localStorage.getItem(MANUAL_OVERRIDES_KEY) || '{}'); } catch { return {}; }
+}
+function saveManualOverrides(o) {
+  try { localStorage.setItem(MANUAL_OVERRIDES_KEY, JSON.stringify(o)); } catch (_) {}
+}
+
+/** Stamp each booking with its manual override flags (mutates list in-place). */
+function applyManualOverrides(bookings) {
+  const overrides = loadManualOverrides();
+  bookings.forEach(b => {
+    const ov = overrides[b.id];
+    if (ov && Object.keys(ov.fields).length > 0) {
+      Object.assign(b, ov.fields);
+      b._has_manual_overrides = true;
+      b._manual_fields        = Object.keys(ov.fields);
+      b._manual_modified_at   = ov.modified_at;
+    } else {
+      delete b._has_manual_overrides;
+      delete b._manual_fields;
+      delete b._manual_modified_at;
+    }
+  });
+  return bookings;
+}
+
 try {
   const saved = localStorage.getItem('lodgify_bookings');
   if (saved) {
@@ -65,6 +101,9 @@ try {
     if (b) b.included_in_stats = val;
   });
 } catch (_) {}
+
+// Apply manual field overrides (always – works for both mock and Lodgify data)
+applyManualOverrides(BOOKINGS);
 
 const MOCK = true; // set to false when backend is live
 
@@ -136,23 +175,49 @@ api.interceptors.request.use((config) => {
     const body = typeof config.data === 'string' ? JSON.parse(config.data) : (config.data || {});
     const idx = BOOKINGS.findIndex(b => b.id === id);
     if (idx >= 0) {
-      BOOKINGS[idx] = { ...BOOKINGS[idx], ...body, id };
+      const prev = BOOKINGS[idx];
+      BOOKINGS[idx] = { ...prev, ...body, id };
       // Persist included_in_stats override
       if ('included_in_stats' in body) {
         try {
-          const overrides = JSON.parse(localStorage.getItem('booking_stats_overrides') || '{}');
-          if (body.included_in_stats === false) {
-            overrides[id] = false;
-          } else {
-            delete overrides[id]; // remove override → default true
-          }
-          localStorage.setItem('booking_stats_overrides', JSON.stringify(overrides));
+          const soMap = JSON.parse(localStorage.getItem('booking_stats_overrides') || '{}');
+          if (body.included_in_stats === false) soMap[id] = false;
+          else delete soMap[id];
+          localStorage.setItem('booking_stats_overrides', JSON.stringify(soMap));
         } catch (_) {}
+      }
+      // Track manual field overrides for any lockable field that changed
+      const moMap = loadManualOverrides();
+      if (!moMap[id]) moMap[id] = { fields: {}, modified_at: new Date().toISOString() };
+      let changed = false;
+      LOCKABLE_FIELDS.forEach(f => {
+        if (f in body && String(body[f]) !== String(prev[f] ?? '')) {
+          moMap[id].fields[f] = body[f];
+          changed = true;
+        }
+      });
+      if (changed) {
+        moMap[id].modified_at = new Date().toISOString();
+        saveManualOverrides(moMap);
+        BOOKINGS[idx]._has_manual_overrides = true;
+        BOOKINGS[idx]._manual_fields        = Object.keys(moMap[id].fields);
+        BOOKINGS[idx]._manual_modified_at   = moMap[id].modified_at;
       }
       data = BOOKINGS[idx];
     } else {
       data = null;
     }
+  }
+
+  // Clear manual overrides for a booking (unlock)
+  else if (/^bookings\/\d+\/clear-overrides$/.test(url) && config.method === 'delete') {
+    const id = parseInt(url.split('/')[1]);
+    const moMap = loadManualOverrides();
+    delete moMap[id];
+    saveManualOverrides(moMap);
+    const b = BOOKINGS.find(b => b.id === id);
+    if (b) { delete b._has_manual_overrides; delete b._manual_fields; delete b._manual_modified_at; }
+    data = { success: true };
   }
 
   // Delete booking
@@ -315,6 +380,7 @@ api.interceptors.request.use((config) => {
           if (!incoming.length) throw new Error('sync.json enthält keine Buchungen');
           normalizeBookings(incoming);
           enrichBookings(incoming);
+          applyManualOverrides(incoming);
           BOOKINGS.splice(0, BOOKINGS.length, ...incoming);
           try { localStorage.setItem('lodgify_bookings', JSON.stringify(incoming)); } catch (_) {}
           const reservations = incoming.filter(b => !b.is_owner_block);
@@ -353,6 +419,7 @@ api.interceptors.request.use((config) => {
       .then(result => {
         normalizeBookings(result.bookings);
         enrichBookings(result.bookings);
+        applyManualOverrides(result.bookings);
         BOOKINGS.splice(0, BOOKINGS.length, ...result.bookings);
         try { localStorage.setItem('lodgify_bookings', JSON.stringify(result.bookings)); } catch (_) {}
         const syncedAt = new Date(result.syncedAt).toLocaleString('de-DE');
@@ -406,6 +473,7 @@ const LS_KEYS = [
   'booking_task_dues',       // custom due date overrides per task
   'company_settings',        // company name, address, bank details etc.
   'lodgify_bookings',        // letzter Lodgify-Import (persistiert über Reloads)
+  MANUAL_OVERRIDES_KEY,      // manuell gesperrte Felder je Buchung
 ];
 
 export function getDatabase() {

@@ -27,8 +27,15 @@ function SortIcon({ dir }) {
   return <span className="text-blue-600 ml-1">{dir === 'asc' ? '↑' : '↓'}</span>;
 }
 
+const FIELD_LABELS = {
+  invoice_number: 'Rechnungsnr.', status: 'Status', payment_status: 'Zahlung',
+  guest_name: 'Gastname', company_name: 'Firma', total_price: 'Gesamtpreis',
+  checkin_date: 'Anreise', checkout_date: 'Abreise', nights: 'Nächte',
+  guest_count: 'Gäste', booking_date: 'Buchungsdatum',
+};
+
 // ─── Inline-editable cell ────────────────────────────────────────────────────
-function EditableCell({ booking, col, editingCell, onStartEdit, onChangeEdit, onSaveEdit, onCancelEdit, isDuplicate }) {
+function EditableCell({ booking, col, editingCell, onStartEdit, onChangeEdit, onSaveEdit, onCancelEdit, isDuplicate, isLocked }) {
   const inputRef = useRef(null);
   const isEditing = editingCell?.id === booking.id && editingCell?.field === col.key;
 
@@ -94,12 +101,15 @@ function EditableCell({ booking, col, editingCell, onStartEdit, onChangeEdit, on
     const isEditable = col.editable !== false;
     return (
       <td
-        className={`px-3 py-2 text-sm ${isEditable ? 'cursor-text hover:bg-blue-50 group relative' : ''}`}
-        title={isEditable ? 'Klicken zum Bearbeiten' : undefined}
+        className={`px-3 py-2 text-sm ${isEditable ? 'cursor-text hover:bg-blue-50 group relative' : ''} ${isLocked ? 'bg-amber-50/60' : ''}`}
+        title={isLocked ? `🔒 Manuell gesetzt – geschützt vor Import` : isEditable ? 'Klicken zum Bearbeiten' : undefined}
         onClick={handleClick}
       >
         {display}
-        {isEditable && (
+        {isLocked && (
+          <span className="absolute left-1 top-1 text-[9px] text-amber-500 pointer-events-none leading-none">🔒</span>
+        )}
+        {isEditable && !isLocked && (
           <span className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-40 text-blue-400 text-xs pointer-events-none">✏</span>
         )}
       </td>
@@ -296,6 +306,14 @@ export default function BookingsListPage() {
   const handleDelete = async (id, name) => {
     if (!confirm(`Buchung von "${name}" wirklich löschen?`)) return;
     await api.delete(`/bookings/${id}`);
+    load();
+    loadAllBookings();
+  };
+
+  const handleClearOverrides = async (b) => {
+    const fields = (b._manual_fields || []).map(f => FIELD_LABELS[f] || f).join(', ');
+    if (!confirm(`Manuelle Sperrung für „${b.guest_name}" aufheben?\nGesperrte Felder: ${fields}\n\nBeim nächsten Lodgify-Import werden diese Felder wieder überschrieben.`)) return;
+    await api.delete(`/bookings/${b.id}/clear-overrides`);
     load();
     loadAllBookings();
   };
@@ -522,6 +540,13 @@ export default function BookingsListPage() {
                         title={b.included_in_stats === false ? 'Nicht in Auswertung – klicken zum Aktivieren' : 'In Auswertung – klicken zum Deaktivieren'}
                         className={`text-base leading-none ${b.included_in_stats === false ? 'text-gray-300 hover:text-gray-500' : 'text-green-500 hover:text-green-700'}`}
                       >📊</button>
+                      {b._has_manual_overrides && (
+                        <button
+                          onClick={() => handleClearOverrides(b)}
+                          className="text-base leading-none text-amber-500 hover:text-amber-700"
+                          title={`🔒 Manuell gesperrt: ${(b._manual_fields||[]).map(f=>FIELD_LABELS[f]||f).join(', ')}\nKlicken zum Freigeben für nächsten Import`}
+                        >🔓</button>
+                      )}
                       <button
                         onClick={() => handleDelete(b.id, b.guest_name)}
                         className="text-base leading-none text-red-400 hover:text-red-600"
@@ -542,6 +567,7 @@ export default function BookingsListPage() {
                       onSaveEdit={saveEdit}
                       onCancelEdit={cancelEdit}
                       isDuplicate={col.key === 'invoice_number' && duplicateInvoices.has(b.id)}
+                      isLocked={b._has_manual_overrides && b._manual_fields?.includes(col.key)}
                     />
                   ))}
                 </tr>
