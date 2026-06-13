@@ -6,6 +6,7 @@ const navItems = [
   { to: '/bookings', label: 'Buchungen', icon: '📋' },
   { to: '/calendar', label: 'Kalender', icon: '📅' },
   { to: '/tasks', label: 'Aufgaben', icon: '☑️' },
+  { to: '/cleaning', label: 'Reinigung', icon: '🧹' },
   { to: '/reports', label: 'Auswertungen', icon: '📈' },
   { to: '/customers', label: 'Kunden', icon: '👤' },
   { to: '/settings', label: 'Einstellungen', icon: '⚙️' },

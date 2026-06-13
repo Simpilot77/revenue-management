@@ -11,6 +11,7 @@ import UsersPage from './pages/UsersPage';
 import CustomersPage from './pages/CustomersPage';
 import SettingsPage from './pages/SettingsPage';
 import TasksPage from './pages/TasksPage';
+import CleaningManagementPage from './pages/CleaningManagementPage';
 
 function PrivateRoute({ children }) {
   return children;
@@ -33,6 +34,7 @@ export default function App() {
             <Route path="customers" element={<CustomersPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="tasks" element={<TasksPage />} />
+            <Route path="cleaning" element={<CleaningManagementPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
