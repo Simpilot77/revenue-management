@@ -1,0 +1,56 @@
+name: Lodgify Sync
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'   # Alle 6 Stunden automatisch
+  workflow_dispatch:
+    inputs:
+      date_from:
+        description: 'Von-Datum (YYYY-MM-DD), Standard: 1 Jahr zurück'
+        required: false
+        default: ''
+      date_to:
+        description: 'Bis-Datum (YYYY-MM-DD), Standard: 2 Jahre voraus'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Abhängigkeiten installieren
+        run: pip install requests
+
+      - name: Lodgify sync ausführen
+        env:
+          LODGIFY_API_KEY:    ${{ secrets.LODGIFY_API_KEY }}
+          LODGIFY_ACCOUNT_ID: ${{ secrets.LODGIFY_ACCOUNT_ID }}
+          HOUSE_MAP:          ${{ secrets.LODGIFY_HOUSE_MAP }}
+          DATE_FROM:          ${{ github.event.inputs.date_from }}
+          DATE_TO:            ${{ github.event.inputs.date_to }}
+        run: python .github/scripts/lodgify_sync.py
+
+      - name: Sync-Daten committen
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add frontend/public/data/sync.json
+          if git diff --cached --quiet; then
+            echo "Keine Änderungen – kein Commit nötig."
+          else
+            git commit -m "chore: Lodgify sync $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git push
+          fi

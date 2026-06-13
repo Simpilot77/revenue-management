@@ -13,6 +13,10 @@ function fmtDateShort(ds) {
   if (!ds) return '';
   return new Date(ds).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
 }
+function fmtDateFull(ds) {
+  if (!ds) return '';
+  return new Date(ds).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
 
 const MONTH_NAMES = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
 const DAY_NAMES_SHORT = ['So','Mo','Di','Mi','Do','Fr','Sa'];
@@ -244,18 +248,14 @@ export default function CalendarPage() {
                           >
                             {today && <div className="absolute top-0 bottom-0 left-0 w-1 bg-violet-500" />}
                             {cs && (
-                              <div className={`absolute inset-0 opacity-20 pointer-events-none
-                                ${cs === 'done' ? 'bg-green-500' : cs === 'organized' ? 'bg-amber-400' : 'bg-red-500'}`} />
-                            )}
-                            {cs && (
                               <div style={{
-                                position: 'absolute', bottom: 3, left: '50%', transform: 'translateX(-50%)',
-                                width: 20, height: 20, borderRadius: '50%',
+                                position: 'absolute', top: 2, right: 2,
+                                width: 14, height: 14, borderRadius: '50%',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                fontSize: '0.8rem', zIndex: 2,
+                                fontSize: '0.6rem', zIndex: 2,
                                 backgroundColor: cs === 'done' ? '#dcfce7' : cs === 'organized' ? '#fef3c7' : '#fee2e2',
                                 border: `1.5px solid ${cs === 'done' ? '#22c55e' : cs === 'organized' ? '#f59e0b' : '#ef4444'}`,
-                                boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+                                boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
                               }}>
                                 🧹
                               </div>
@@ -291,81 +291,82 @@ export default function CalendarPage() {
                               width: barWidth,
                               height: barHeight,
                               backgroundColor: meta.bg,
-                              borderRadius: `${checkinTriangle ? 5 : 0}px ${checkoutTriangle ? 5 : 0}px ${checkoutTriangle ? 5 : 0}px ${checkinTriangle ? 5 : 0}px`,
+                              borderRadius: `${checkinTriangle ? 6 : 0}px ${checkoutTriangle ? 6 : 0}px ${checkoutTriangle ? 6 : 0}px ${checkinTriangle ? 6 : 0}px`,
                               cursor: 'pointer',
                               zIndex: 5,
                               overflow: 'hidden',
-                              boxShadow: isDupe ? `0 0 0 2px #f97316, 0 2px 6px rgba(0,0,0,0.25)` : '0 1px 4px rgba(0,0,0,0.18)',
+                              boxShadow: isDupe ? `0 0 0 2px #f97316, 0 1px 3px rgba(0,0,0,0.18)` : '0 1px 2px rgba(0,0,0,0.15)',
                               display: 'flex',
                               alignItems: 'center',
-                              paddingLeft: 8,
-                              paddingRight: 6,
-                              gap: 4,
+                              paddingLeft: checkinTriangle ? 14 : 8,
+                              paddingRight: checkoutTriangle ? 14 : 8,
+                              transition: 'filter 0.1s, box-shadow 0.1s',
                             }}
-                            title={isBlock ? `🔒 Gesperrt${b.block_reason ? ': ' + b.block_reason : ''}` : `${b.guest_name} · ${b.guest_count}P · ${formatCurrency(b.total_price)}`}
+                            className="hover:brightness-110"
+                            onMouseEnter={(e) => {
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              setTooltip({ booking: b, rect });
+                            }}
+                            onMouseLeave={() => setTooltip(null)}
                             onClick={(e) => { e.stopPropagation(); navigate(`/bookings/${b.id}/edit`); }}
                           >
-                            {/* Check-in marker — green circle with arrow, sits on the bar's left edge */}
+                            {/* Check-in marker — small green dot on the bar's left edge */}
                             {checkinTriangle && (
                               <div
-                                title={`Check-in: ${fmtDateShort(b.checkin_date)}`}
                                 style={{
-                                  position: 'absolute', left: -10, top: '50%', transform: 'translateY(-50%)',
-                                  width: 22, height: 22, borderRadius: '50%',
-                                  background: '#22c55e', border: '2.5px solid white',
-                                  boxShadow: '0 1px 4px rgba(0,0,0,0.35)',
+                                  position: 'absolute', left: -7, top: '50%', transform: 'translateY(-50%)',
+                                  width: 16, height: 16, borderRadius: '50%',
+                                  background: '#22c55e', border: '2px solid white',
+                                  boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
                                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  fontSize: '0.75rem', color: 'white', fontWeight: 900,
+                                  fontSize: '0.6rem', color: 'white', fontWeight: 900,
                                   zIndex: 7, pointerEvents: 'none',
                                 }}
                               >→</div>
                             )}
-                            {/* Check-out marker — red circle with square, sits on the bar's right edge */}
+                            {/* Check-out marker — small red dot on the bar's right edge */}
                             {checkoutTriangle && (
                               <div
-                                title={`Check-out: ${fmtDateShort(b.checkout_date)}`}
                                 style={{
-                                  position: 'absolute', right: -10, top: '50%', transform: 'translateY(-50%)',
-                                  width: 22, height: 22, borderRadius: '50%',
-                                  background: '#ef4444', border: '2.5px solid white',
-                                  boxShadow: '0 1px 4px rgba(0,0,0,0.35)',
+                                  position: 'absolute', right: -7, top: '50%', transform: 'translateY(-50%)',
+                                  width: 16, height: 16, borderRadius: '50%',
+                                  background: '#ef4444', border: '2px solid white',
+                                  boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
                                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  fontSize: '0.65rem', color: 'white', fontWeight: 900,
+                                  fontSize: '0.55rem', color: 'white', fontWeight: 900,
                                   zIndex: 7, pointerEvents: 'none',
                                 }}
                               >■</div>
                             )}
 
-                            {/* Text content */}
+                            {/* Text content — guest name only, details on hover */}
                             <div style={{
                               overflow: 'hidden',
                               color: 'white',
-                              flexShrink: 1,
+                              flex: 1,
                               minWidth: 0,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
                             }}>
                               {isDupe && (
-                                <div style={{ fontSize: '0.55rem', background: '#f97316', borderRadius: 3, padding: '0 3px', display: 'inline-block', marginBottom: 1, fontWeight: 700 }}>⚠ Doppelt</div>
+                                <span style={{ fontSize: '0.65rem', flexShrink: 0 }}>⚠️</span>
                               )}
-                              <div style={{
-                                fontSize: '0.7rem', fontWeight: 700,
+                              <span style={{
+                                fontSize: '0.72rem', fontWeight: 600,
                                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                                textShadow: '0 1px 2px rgba(0,0,0,0.4)',
+                                textShadow: '0 1px 2px rgba(0,0,0,0.35)',
                                 lineHeight: 1.2,
                               }}>
                                 {isBlock ? '🔒 Gesperrt' : b.guest_name}
-                                {!isBlock && barWidth > 60 && (
-                                  <span style={{ fontWeight: 600, opacity: 0.9 }}> · 👥{b.guest_count}</span>
-                                )}
-                              </div>
-                              {!isBlock && barWidth > 80 && (
-                                <div style={{
-                                  fontSize: '0.6rem', opacity: 0.9,
-                                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                              </span>
+                              {!isBlock && barWidth > 70 && (
+                                <span style={{
+                                  fontSize: '0.65rem', opacity: 0.85, flexShrink: 0,
                                   textShadow: '0 1px 2px rgba(0,0,0,0.3)',
-                                  lineHeight: 1.2,
                                 }}>
-                                  🌙{b.nights} · 💶{formatCurrency(b.total_price)}
-                                </div>
+                                  👥{b.guest_count}
+                                </span>
                               )}
                             </div>
                           </div>
@@ -417,6 +418,69 @@ export default function CalendarPage() {
         {/* ── Mini overview section ── */}
         <MiniOverview houses={houses} navigate={navigate} cleaningMarkers={cleaningMarkers} />
       </div>
+
+      {/* ── Booking hover tooltip ── */}
+      {tooltip && (() => {
+        const b = tooltip.booking;
+        const meta = STATUS_META[b.status] || STATUS_META.bestaetigt;
+        const rect = tooltip.rect;
+        const width = 250;
+        let left = rect.left;
+        if (left + width > window.innerWidth - 16) left = Math.max(8, window.innerWidth - width - 16);
+        let top = rect.bottom + 8;
+        const estHeight = 200;
+        if (top + estHeight > window.innerHeight) top = Math.max(8, rect.top - estHeight - 8);
+        const isBlock = b.status === 'gesperrt';
+        return (
+          <div
+            style={{ position: 'fixed', left, top, width, zIndex: 2000, pointerEvents: 'none' }}
+            className="rounded-xl bg-white shadow-2xl border border-gray-200 p-3.5 text-xs"
+          >
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <span className="font-semibold text-sm text-gray-900 truncate">
+                {isBlock ? '🔒 Gesperrt' : (b.guest_name || '—')}
+              </span>
+              <span
+                className="px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap"
+                style={{ backgroundColor: meta.light, color: meta.text }}
+              >
+                {meta.label}
+              </span>
+            </div>
+            {b.company_name && (
+              <div className="text-gray-400 mb-1.5 truncate">{b.company_name}</div>
+            )}
+            {isBlock ? (
+              b.block_reason && <div className="text-gray-600">{b.block_reason}</div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between text-gray-600 mb-1.5">
+                  <span>📅 {fmtDateFull(b.checkin_date)} → {fmtDateFull(b.checkout_date)}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center bg-gray-50 rounded-lg py-1.5 mb-1.5">
+                  <div>
+                    <div className="font-semibold text-gray-800">🌙 {b.nights}</div>
+                    <div className="text-[10px] text-gray-400">Nächte</div>
+                  </div>
+                  <div>
+                    <div className="font-semibold text-gray-800">👥 {b.guest_count}</div>
+                    <div className="text-[10px] text-gray-400">Gäste</div>
+                  </div>
+                  <div>
+                    <div className="font-semibold text-gray-800">💶 {formatCurrency(b.total_price)}</div>
+                    <div className="text-[10px] text-gray-400">Gesamt</div>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-gray-400 text-[11px]">
+                  <span>{b.channel || '—'}</span>
+                  {b.invoice_number && <span>#{b.invoice_number}</span>}
+                </div>
+              </>
+            )}
+            <div className="text-center text-[10px] text-gray-300 mt-2 pt-1.5 border-t border-gray-100">Klicken zum Bearbeiten</div>
+          </div>
+        );
+      })()}
 
       {/* ── Cleaning Modal ── */}
       {cleaningModal && (
