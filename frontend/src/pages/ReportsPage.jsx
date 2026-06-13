@@ -191,7 +191,7 @@ export default function ReportsPage() {
           )}
           <button
             onClick={handlePdfExport}
-            disabled={!tabData}
+            disabled={tab === 7 ? bookingsDetail.length === 0 : !tabData}
             className="btn-secondary flex items-center gap-2 disabled:opacity-40"
           >
             📄 PDF Export
@@ -509,6 +509,7 @@ export default function ReportsPage() {
             const SORT_OPTIONS = [
               { value: 'checkin_date',  label: 'Anreise' },
               { value: 'checkout_date', label: 'Abreise' },
+              { value: 'booking_date',  label: 'Buchungsdatum' },
               { value: 'guest_name',    label: 'Gast' },
               { value: 'net',           label: 'Netto' },
               { value: 'gross',         label: 'Brutto' },
