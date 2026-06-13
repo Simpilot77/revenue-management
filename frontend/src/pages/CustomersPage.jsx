@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../utils/api';
+import api, { getCustomers } from '../utils/api';
 import { exportCustomers } from '../utils/pdfExport';
+import { emitDataChange, onDataChange } from '../utils/syncBus';
 import { formatDate, formatCurrency, STATUS_LABELS, STATUS_COLORS } from '../utils/format';
 
 function CustomerDetailModal({ customer, onClose, onEdit }) {
@@ -131,9 +132,17 @@ function CustomerModal({ customer, onClose, onSave }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (numDuplicate) return;
+    if (numDuplicate && form.customer_number) {
+      const conflict = getCustomers().find(c => c.id !== customer?.id && c.customer_number === form.customer_number);
+      const ok = window.confirm(
+        `Kundennummer "${form.customer_number}" ist bereits für ${conflict?.guest_name || conflict?.company_name || 'einen anderen Kunden'} vergeben.\n\n` +
+        `Trotzdem übernehmen? Die alte Zuweisung wird entfernt.`
+      );
+      if (!ok) return;
+      if (conflict) await api.put(`/customers/${conflict.id}`, { ...conflict, customer_number: '' });
+    }
     onSave(form);
   };
 
@@ -343,6 +352,13 @@ export default function CustomersPage() {
     fetchCustomers(search);
   }, [search]);
 
+  useEffect(() => {
+    return onDataChange((e) => {
+      if (e.detail?.type === 'customer') fetchCustomers(search);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
   const openNew = () => { setModalCustomer(null); setModalOpen(true); };
   const openEdit = (c) => { setModalCustomer(c); setModalOpen(true); setDetailCustomer(null); };
   const closeModal = () => setModalOpen(false);
@@ -355,6 +371,7 @@ export default function CustomersPage() {
     }
     closeModal();
     fetchCustomers(search);
+    emitDataChange({ type: 'customer' });
   };
 
   const handleDelete = async (id) => {

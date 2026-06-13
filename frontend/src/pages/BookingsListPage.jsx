@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { formatCurrency, formatDate, STATUS_LABELS, STATUS_COLORS, PAYMENT_STATUS_LABELS, PAYMENT_STATUS_COLORS } from '../utils/format';
 import { exportBookingsList } from '../utils/pdfExport';
+import { applyInvoiceNumber } from '../utils/numbering';
+import { onDataChange } from '../utils/syncBus';
 
 // ─── Column definitions ──────────────────────────────────────────────────────
 // editable: false = only navigate to form; type = input type or 'select'
@@ -197,7 +199,6 @@ export default function BookingsListPage() {
   const [duplicateInvoices, setDuplicateInvoices] = useState(new Set()); // booking ids with duplicate invoice numbers
   const [invoiceLang, setInvoiceLang] = useState('de');
   const [editingCell, setEditingCell] = useState(null); // { id, field, value }
-  const [dupConfirm, setDupConfirm] = useState(null); // { booking, newValue, existingIds }
   const limit = 25;
 
   const refreshInvoiceAnalysis = useCallback((all) => {
@@ -269,6 +270,15 @@ export default function BookingsListPage() {
   }, [filters, page]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    return onDataChange((e) => {
+      if (e.detail?.type === 'invoice' || e.detail?.type === 'customer') {
+        load();
+        loadAllBookings();
+      }
+    });
+  }, [load, loadAllBookings]);
 
   const setFilter = (key, value) => { setFilters(f => ({ ...f, [key]: value })); setPage(1); };
 
@@ -365,24 +375,13 @@ export default function BookingsListPage() {
 
     setEditingCell(null);
 
-    // Check for duplicate invoice numbers
-    if (editingCell.field === 'invoice_number' && val) {
+    // Last-edit-wins for invoice numbers: applyInvoiceNumber handles conflict
+    // confirmation and clears the number from any other booking that had it.
+    if (editingCell.field === 'invoice_number') {
       const inv = String(val).trim();
-      const existingIds = allBookings
-        .filter(b => b.id !== editingCell.id && b.invoice_number?.trim() === inv && ['bestaetigt','eingecheckt','ausgecheckt'].includes(b.status))
-        .map(b => b.id);
-      if (existingIds.length > 0) {
-        const existing = allBookings.find(b => b.id === existingIds[0]);
-        setDupConfirm({
-          bookingId: editingCell.id,
-          field: editingCell.field,
-          value: inv,
-          existingGuest: existing?.guest_name || '—',
-          existingHouse: existing?.house_short || '—',
-          existingDate: existing?.checkin_date?.slice(0,10) || '—',
-        });
-        return; // wait for user confirmation
-      }
+      const ok = await applyInvoiceNumber(editingCell.id, inv);
+      if (ok) { load(); loadAllBookings(); }
+      return;
     }
 
     await doSaveEdit(editingCell.id, editingCell.field, val);
@@ -586,56 +585,6 @@ export default function BookingsListPage() {
           </div>
         )}
       </div>
-
-      {/* Duplicate invoice confirmation modal */}
-      {dupConfirm && (
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}
-          onClick={() => setDupConfirm(null)}
-        >
-          <div
-            className="card"
-            style={{ minWidth: '360px', maxWidth: '460px', padding: '28px' }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-start gap-3 mb-4">
-              <span className="text-2xl">🚨</span>
-              <div>
-                <h3 className="font-bold text-gray-900 text-base">Doppelte Rechnungsnummer</h3>
-                <p className="text-sm text-gray-600 mt-1">
-                  Die Rechnungsnummer <span className="font-mono font-bold text-red-700">{dupConfirm.value}</span> ist bereits vergeben:
-                </p>
-                <div className="mt-2 bg-red-50 border border-red-100 rounded-lg px-3 py-2 text-xs text-red-800">
-                  <span className="font-semibold">{dupConfirm.existingGuest}</span>
-                  {' · '}Haus {dupConfirm.existingHouse}
-                  {' · '}Anreise {dupConfirm.existingDate}
-                </div>
-                <p className="text-sm text-gray-500 mt-3">
-                  Möchtest du die Nummer trotzdem übernehmen? Beide Einträge werden dann als „doppelt" markiert, bis du es korrigierst.
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-3 justify-end">
-              <button
-                className="btn-secondary text-sm"
-                onClick={() => setDupConfirm(null)}
-              >
-                Abbrechen
-              </button>
-              <button
-                className="text-sm px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium transition-colors"
-                onClick={async () => {
-                  const conf = dupConfirm;
-                  setDupConfirm(null);
-                  await doSaveEdit(conf.bookingId, conf.field, conf.value);
-                }}
-              >
-                Trotzdem speichern
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

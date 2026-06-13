@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { exportInvoiceFromData } from '../utils/pdfExport';
+import { suggestNextInvoiceNumber, suggestNextCustomerNumber, applyBookingNumberField } from '../utils/numbering';
 
 // ─── Load presets from company_settings ──────────────────────────────────────
 function loadPresets() {
@@ -70,6 +71,36 @@ export default function InvoicePreviewModal({ data, onClose, onLangChange, onCha
     const next = { prefix, suffix };
     setInvNum(next);
     set('invoice_number', prefix + suffix);
+  };
+
+  // ── Auto / conflict handling for invoice & customer numbers ──
+  const [autoLoading, setAutoLoading] = useState(false);
+  const handleAutoInvoiceNumber = async () => {
+    if (!data._house_id) return;
+    setAutoLoading(true);
+    try {
+      const next = await suggestNextInvoiceNumber(data._house_id);
+      const split = splitInvNum(next);
+      setInvNum(split);
+      set('invoice_number', next);
+      await commitInvoiceNumber(next);
+    } finally { setAutoLoading(false); }
+  };
+  const commitInvoiceNumber = async (value) => {
+    if (!data._booking_id) return;
+    await applyBookingNumberField(data._booking_id, 'invoice_number', value, 'Rechnungsnummer');
+  };
+  const handleAutoCustomerNumber = async () => {
+    setAutoLoading(true);
+    try {
+      const next = await suggestNextCustomerNumber();
+      set('customer_number', next);
+      await commitCustomerNumber(next);
+    } finally { setAutoLoading(false); }
+  };
+  const commitCustomerNumber = async (value) => {
+    if (!data._booking_id) return;
+    await applyBookingNumberField(data._booking_id, 'customer_number', value, 'Kundennummer');
   };
 
   // ── Date range picker state ──
@@ -204,7 +235,9 @@ export default function InvoicePreviewModal({ data, onClose, onLangChange, onCha
                       }}
                       onBlur={e => {
                         const s = e.target.value.replace(/\D/g, '').slice(0, 4).padStart(4, '0');
+                        const full = invNum.prefix + s;
                         updateInvNum(invNum.prefix, s);
+                        commitInvoiceNumber(full);
                       }}
                     />
                   </div>
@@ -213,6 +246,15 @@ export default function InvoicePreviewModal({ data, onClose, onLangChange, onCha
                       {data.invoice_number || '—'}
                     </div>
                   </div>
+                  <button
+                    type="button"
+                    disabled={autoLoading || !data._house_id}
+                    className="mt-4 text-xs px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg border border-blue-200 font-medium disabled:opacity-40 whitespace-nowrap"
+                    onClick={handleAutoInvoiceNumber}
+                    title="Nächste freie Rechnungsnummer einsetzen"
+                  >
+                    🔄 Automatisch
+                  </button>
                 </div>
               </div>
 
@@ -278,7 +320,27 @@ export default function InvoicePreviewModal({ data, onClose, onLangChange, onCha
                 )}
               </div>
 
-              <F label="Kundennummer" field="customer_number" />
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Kundennummer</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    className="form-input text-sm w-full font-mono"
+                    value={data.customer_number === '—' ? '' : (data.customer_number || '')}
+                    onChange={e => set('customer_number', e.target.value)}
+                    onBlur={e => commitCustomerNumber(e.target.value)}
+                    placeholder="z. B. 0042"
+                  />
+                  <button
+                    type="button"
+                    disabled={autoLoading}
+                    className="text-xs px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg border border-blue-200 font-medium disabled:opacity-40 whitespace-nowrap"
+                    onClick={handleAutoCustomerNumber}
+                    title="Nächste freie Kundennummer einsetzen"
+                  >
+                    🔄
+                  </button>
+                </div>
+              </div>
               <F label="Ansprechpartner" field="contact_person" />
               {data.external_reference && (
                 <div>

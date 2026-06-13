@@ -3,6 +3,8 @@ import api from '../utils/api';
 import { formatCurrency } from '../utils/format';
 import { buildInvoicePreviewData } from '../utils/pdfExport';
 import InvoicePreviewModal from '../components/InvoicePreviewModal';
+import { applyInvoiceNumber } from '../utils/numbering';
+import { onDataChange } from '../utils/syncBus';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -741,7 +743,7 @@ function TaskRow({ task, booking, tasks, today, invoiceNum, setInvoiceNum, onTog
 
   const handleInvoiceBlur = () => {
     const val = invoiceNum.trim();
-    api.put(`/bookings/${booking.id}`, { ...booking, invoice_number: val || null }).catch(() => {});
+    applyInvoiceNumber(booking.id, val).catch(() => {});
   };
 
   return (
@@ -1277,7 +1279,7 @@ export default function TasksPage() {
   const past30  = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
   const next365 = new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10);
 
-  useEffect(() => {
+  const loadBookings = useCallback(() => {
     Promise.all([
       api.get('/meta/houses'),
       api.get('/bookings', { params: { limit: 500, from: past30, to: next365 } }),
@@ -1289,6 +1291,16 @@ export default function TasksPage() {
       setBookings(all);
     }).finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    loadBookings();
+  }, [loadBookings]);
+
+  useEffect(() => {
+    return onDataChange((e) => {
+      if (e.detail?.type === 'invoice' || e.detail?.type === 'customer') loadBookings();
+    });
+  }, [loadBookings]);
 
   const handleTaskChange = useCallback((booking, key, value) => {
     if (key === 'cleaning_done' && booking.house_id) {

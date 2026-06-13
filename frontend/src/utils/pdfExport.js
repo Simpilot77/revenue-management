@@ -392,6 +392,9 @@ export function buildInvoicePreviewData(booking, lang = 'de') {
 
   return {
     lang,
+    // Internal references (for invoice/customer number sync, not printed)
+    _booking_id: booking.id,
+    _house_id: booking.house_id,
     // Recipient
     company_name: booking.company_name || '',
     guest_name: booking.guest_name || '',

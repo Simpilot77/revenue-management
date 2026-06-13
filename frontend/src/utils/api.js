@@ -9,6 +9,9 @@ import { runLodgifySync, ENV_API_KEY, ENV_HOUSE_MAP } from './lodgifyClient';
 // In-memory mutable customers array
 let _customers = [...CUSTOMERS];
 
+// Read-only access to the in-memory customers array (for conflict checks etc.)
+export function getCustomers() { return _customers; }
+
 // ── Buchungen aus letztem Lodgify-Import laden (überschreibt Mock-Daten) ─────
 // Normalize fields that Lodgify can return as objects instead of primitives
 function normalizeBookings(list) {
