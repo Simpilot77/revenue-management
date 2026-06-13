@@ -247,10 +247,14 @@ export default function CalendarPage() {
                             {cs && (
                               <div style={{
                                 position: 'absolute', bottom: 3, left: '50%', transform: 'translateX(-50%)',
-                                fontSize: '0.55rem', fontWeight: 700, whiteSpace: 'nowrap', zIndex: 2,
-                                color: cs === 'done' ? '#166534' : cs === 'organized' ? '#92400e' : '#991b1b',
+                                width: 20, height: 20, borderRadius: '50%',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: '0.8rem', zIndex: 2,
+                                backgroundColor: cs === 'done' ? '#dcfce7' : cs === 'organized' ? '#fef3c7' : '#fee2e2',
+                                border: `1.5px solid ${cs === 'done' ? '#22c55e' : cs === 'organized' ? '#f59e0b' : '#ef4444'}`,
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
                               }}>
-                                {cs === 'done' ? '✓ Reinig.' : cs === 'organized' ? '◷ Reinig.' : '🧹 Reinig.'}
+                                🧹
                               </div>
                             )}
                           </div>
@@ -303,27 +307,27 @@ export default function CalendarPage() {
                               <div
                                 title={`Check-in: ${fmtDateShort(b.checkin_date)}`}
                                 style={{
-                                  position: 'absolute', left: -7, top: '50%', transform: 'translateY(-50%)',
-                                  width: 16, height: 16, borderRadius: '50%',
-                                  background: '#22c55e', border: '2px solid white',
-                                  boxShadow: '0 1px 3px rgba(0,0,0,0.35)',
+                                  position: 'absolute', left: -10, top: '50%', transform: 'translateY(-50%)',
+                                  width: 22, height: 22, borderRadius: '50%',
+                                  background: '#22c55e', border: '2.5px solid white',
+                                  boxShadow: '0 1px 4px rgba(0,0,0,0.35)',
                                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  fontSize: '0.5rem', color: 'white', fontWeight: 900,
+                                  fontSize: '0.75rem', color: 'white', fontWeight: 900,
                                   zIndex: 7, pointerEvents: 'none',
                                 }}
                               >→</div>
                             )}
-                            {/* Check-out marker — red circle with arrow, sits on the bar's right edge */}
+                            {/* Check-out marker — red circle with square, sits on the bar's right edge */}
                             {checkoutTriangle && (
                               <div
                                 title={`Check-out: ${fmtDateShort(b.checkout_date)}`}
                                 style={{
-                                  position: 'absolute', right: -7, top: '50%', transform: 'translateY(-50%)',
-                                  width: 16, height: 16, borderRadius: '50%',
-                                  background: '#ef4444', border: '2px solid white',
-                                  boxShadow: '0 1px 3px rgba(0,0,0,0.35)',
+                                  position: 'absolute', right: -10, top: '50%', transform: 'translateY(-50%)',
+                                  width: 22, height: 22, borderRadius: '50%',
+                                  background: '#ef4444', border: '2.5px solid white',
+                                  boxShadow: '0 1px 4px rgba(0,0,0,0.35)',
                                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  fontSize: '0.5rem', color: 'white', fontWeight: 900,
+                                  fontSize: '0.65rem', color: 'white', fontWeight: 900,
                                   zIndex: 7, pointerEvents: 'none',
                                 }}
                               >■</div>
@@ -346,6 +350,9 @@ export default function CalendarPage() {
                                 lineHeight: 1.2,
                               }}>
                                 {isBlock ? '🔒 Gesperrt' : b.guest_name}
+                                {!isBlock && barWidth > 60 && (
+                                  <span style={{ fontWeight: 600, opacity: 0.9 }}> · 👥{b.guest_count}</span>
+                                )}
                               </div>
                               {!isBlock && barWidth > 80 && (
                                 <div style={{
@@ -354,7 +361,7 @@ export default function CalendarPage() {
                                   textShadow: '0 1px 2px rgba(0,0,0,0.3)',
                                   lineHeight: 1.2,
                                 }}>
-                                  {b.nights}N · {formatCurrency(b.total_price)}
+                                  🌙{b.nights} · 💶{formatCurrency(b.total_price)}
                                 </div>
                               )}
                             </div>
