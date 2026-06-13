@@ -1093,13 +1093,13 @@ export default function TasksPage() {
   const now = useLiveClock();
 
   const today  = new Date().toISOString().slice(0, 10);
-  const past30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
-  const next60 = new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10);
+  const past30  = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const next365 = new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10);
 
   useEffect(() => {
     Promise.all([
       api.get('/meta/houses'),
-      api.get('/bookings', { params: { limit: 500, from: past30, to: next60 } }),
+      api.get('/bookings', { params: { limit: 500, from: past30, to: next365 } }),
     ]).then(([hRes, bRes]) => {
       setHouses(hRes.data || []);
       const all = (bRes.data?.data || []).filter(b =>
