@@ -1,10 +1,30 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../utils/api';
 import { formatCurrency } from '../utils/format';
-import { buildInvoicePreviewData } from '../utils/pdfExport';
+import { buildInvoicePreviewData, exportWorkSchedule } from '../utils/pdfExport';
 import InvoicePreviewModal from '../components/InvoicePreviewModal';
 import { applyInvoiceNumber } from '../utils/numbering';
-import { onDataChange } from '../utils/syncBus';
+import { onDataChange, emitDataChange } from '../utils/syncBus';
+
+const SCOPE_LABELS = { grund: 'Grundreinigung', reinigung: 'Reinigung', bettwaesche: 'Bettwäsche-Wechsel' };
+
+function loadCleaningDetailsMap() {
+  try { return JSON.parse(localStorage.getItem('cleaning_details') || '{}'); } catch { return {}; }
+}
+function cleaningDetailString(booking) {
+  const ds = booking.cleaning_date?.slice(0, 10) || booking.checkout_date?.slice(0, 10);
+  if (!ds || !booking.house_id) return '';
+  const d = loadCleaningDetailsMap()[`${booking.house_id}_${ds}`];
+  if (!d) return '';
+  const parts = [];
+  if (d.scope) parts.push(SCOPE_LABELS[d.scope] || d.scope);
+  if (d.windows) parts.push('Fenster putzen');
+  if (d.deadlineTime) parts.push(`bis ${d.deadlineTime}`);
+  if (d.durationMin) parts.push(`${d.durationMin} Min.`);
+  if (d.cost) parts.push(formatCurrency(Number(d.cost)));
+  if (d.notes) parts.push(d.notes);
+  return parts.join(' · ');
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -1101,6 +1121,21 @@ function ZuErledigenpanel({ bookings }) {
         context,
       });
     });
+
+    // Synthetic task: repay deposit once taken but not yet returned
+    if (booking.deposit_taken && !booking.deposit_returned) {
+      const due = booking.checkout_date?.slice(0, 10);
+      pendingItems.push({
+        bookingId: booking.id,
+        booking,
+        taskKey: 'deposit_return',
+        taskIcon: '💰',
+        taskLabel: `Kaution zurückzahlen${booking.deposit_amount != null ? ` (${formatCurrency(booking.deposit_amount)})` : ''}`,
+        dueDate: due,
+        isOverdue: due && due < today,
+        context,
+      });
+    }
   });
 
   // Sort chronologically by due date (null dates at end)
@@ -1140,6 +1175,11 @@ function ZuErledigenpanel({ bookings }) {
 
   // For each item, allow toggling
   const toggle = (booking, key) => {
+    if (key === 'deposit_return') {
+      api.put(`/bookings/${booking.id}`, { ...booking, deposit_returned: true })
+        .then(() => emitDataChange({ type: 'invoice' }));
+      return;
+    }
     const all = loadAllTasks();
     const current = all[booking.id] || {};
     const updated = { ...current, [key]: !current[key] };
@@ -1164,10 +1204,33 @@ function ZuErledigenpanel({ bookings }) {
   const todayCount    = pendingItems.filter(i => i.dueDate === today).length;
   const upcomingCount = pendingItems.filter(i => i.dueDate && i.dueDate > today).length;
 
+  const handleExport = () => {
+    const rows = pendingItems.map(item => {
+      let details = '';
+      if (item.taskKey === 'invoice') {
+        details = `Rechnungsnr.: ${item.booking.invoice_number || '—'}`;
+      } else if (item.taskKey === 'cleaning_org' || item.taskKey === 'cleaning_done') {
+        details = cleaningDetailString(item.booking);
+      } else if (item.taskKey === 'deposit_return') {
+        details = item.booking.deposit_amount != null ? `Kaution: ${formatCurrency(item.booking.deposit_amount)}` : '';
+      }
+      const note = getTaskNote(item.bookingId, item.taskKey);
+      if (note) details = details ? `${details} · ${note}` : note;
+      return {
+        date: item.dueDate,
+        house: item.booking.house_name || item.booking.house_short,
+        guest: item.booking.guest_name,
+        task: `${item.taskIcon} ${item.taskLabel}`,
+        details,
+      };
+    });
+    exportWorkSchedule(rows);
+  };
+
   return (
     <div className="space-y-4">
       {/* Summary row */}
-      <div className="flex gap-3 flex-wrap">
+      <div className="flex gap-3 flex-wrap items-center">
         {overdueCount > 0 && (
           <div className="flex items-center gap-1.5 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5 text-sm">
             <span className="font-bold text-red-600">⚠ {overdueCount}</span>
@@ -1184,6 +1247,7 @@ function ZuErledigenpanel({ bookings }) {
           <span className="font-bold text-blue-600">{pendingItems.length}</span>
           <span className="text-blue-500">Aufgaben gesamt offen</span>
         </div>
+        <button className="btn-secondary text-sm ml-auto" onClick={handleExport}>📄 Arbeitsplan exportieren</button>
       </div>
 
       {/* Chronological list, grouped by booking */}
@@ -1236,13 +1300,15 @@ function ZuErledigenpanel({ bookings }) {
                     <div className="text-right shrink-0">
                       {dueLabel && <div className={`text-xs ${dueCls}`}>{dueLabel}</div>}
                     </div>
-                    <DueDateCell
-                      bookingId={booking.id}
-                      taskKey={item.taskKey}
-                      booking={booking}
-                      isDone={false}
-                      onChanged={() => rerender(n => n + 1)}
-                    />
+                    {item.taskKey !== 'deposit_return' && (
+                      <DueDateCell
+                        bookingId={booking.id}
+                        taskKey={item.taskKey}
+                        booking={booking}
+                        isDone={false}
+                        onChanged={() => rerender(n => n + 1)}
+                      />
+                    )}
                   </div>
                 );
               })}

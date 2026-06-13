@@ -1093,6 +1093,49 @@ export async function exportBookingsOverview(bookings, channels, year) {
   save(doc, `buchungsuebersicht_${year}.pdf`);
 }
 
+// ─── 5. Arbeitsplan (offene Aufgaben) ───────────────────────────────────────
+
+export async function exportWorkSchedule(items) {
+  if (!items || items.length === 0) {
+    alert('Keine offenen Aufgaben zum Exportieren vorhanden.');
+    return;
+  }
+  const logo = await getReportLogo();
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  header(doc, 'Arbeitsplan', `Offene Aufgaben · Stand ${new Date().toLocaleDateString('de-DE')}`, logo);
+
+  const sorted = [...items].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  const rows = sorted.map(i => [
+    i.date ? fmtDate(i.date) : '—',
+    i.house || '—',
+    i.guest || '—',
+    i.task || '—',
+    i.details || '',
+  ]);
+
+  autoTable(doc, {
+    startY: 30,
+    head: [['Datum', 'Haus', 'Gast', 'Aufgabe', 'Details / Notizen']],
+    body: rows,
+    styles: { fontSize: 9, cellPadding: 2.5, textColor: DARK, overflow: 'linebreak' },
+    headStyles: { fillColor: BLUE, textColor: [255, 255, 255], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: LIGHT },
+    columnStyles: {
+      0: { cellWidth: 22 },
+      1: { cellWidth: 28 },
+      2: { cellWidth: 42 },
+      3: { cellWidth: 48 },
+      4: { cellWidth: 'auto' },
+    },
+    margin: { left: 14, right: 14, top: 30 },
+    didDrawPage: (data) => {
+      if (data.pageNumber > 1) header(doc, 'Arbeitsplan', 'Offene Aufgaben', logo);
+    },
+  });
+
+  save(doc, `arbeitsplan_${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
 export async function exportHouseComparison(houses, from, to, chartImg = null) {
   const logo = await getReportLogo();
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
