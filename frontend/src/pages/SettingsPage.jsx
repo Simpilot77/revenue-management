@@ -26,6 +26,10 @@ const DEFAULT_SETTINGS = {
   lodgify_api_key: '',
   lodgify_account_id: '',
   lodgify_house_map: '',
+  cleaning_notification: {
+    phone: '',
+    template: 'Reinigung {haus} am {datum} bis {uhrzeit} Uhr · {umfang}{fenster} · Dauer: {dauer} Min. · Kosten: {kosten} €\nNotizen: {notizen}',
+  },
   invoice_presets: {
     salutations: [
       {
@@ -242,6 +246,11 @@ export default function SettingsPage() {
         [houseId]: { ...(s.houses?.[houseId] || {}), [field]: value },
       },
     }));
+  const setCleaningNotif = (field, value) =>
+    setSettings(s => ({
+      ...s,
+      cleaning_notification: { ...(s.cleaning_notification || {}), [field]: value },
+    }));
 
   const handleSave = () => {
     localStorage.setItem('company_settings', JSON.stringify(settings));
@@ -365,6 +374,37 @@ export default function SettingsPage() {
             value={settings.invoice_footer}
             onChange={e => set('invoice_footer', e.target.value)}
             placeholder="z. B. Zahlbar innerhalb von 14 Tagen ..."
+          />
+        </Field>
+      </Section>
+
+      {/* 5b. Reinigungs-Benachrichtigung */}
+      <Section title="🧹 Reinigungs-Benachrichtigung">
+        <p className="text-sm text-slate-600">
+          Telefonnummer und Textvorlage für die SMS/WhatsApp-Benachrichtigung im Reinigungsmanagement.
+          Platzhalter: <code className="text-xs bg-slate-100 px-1 py-0.5 rounded">{'{haus}'}</code>{' '}
+          <code className="text-xs bg-slate-100 px-1 py-0.5 rounded">{'{datum}'}</code>{' '}
+          <code className="text-xs bg-slate-100 px-1 py-0.5 rounded">{'{uhrzeit}'}</code>{' '}
+          <code className="text-xs bg-slate-100 px-1 py-0.5 rounded">{'{umfang}'}</code>{' '}
+          <code className="text-xs bg-slate-100 px-1 py-0.5 rounded">{'{fenster}'}</code>{' '}
+          <code className="text-xs bg-slate-100 px-1 py-0.5 rounded">{'{dauer}'}</code>{' '}
+          <code className="text-xs bg-slate-100 px-1 py-0.5 rounded">{'{kosten}'}</code>{' '}
+          <code className="text-xs bg-slate-100 px-1 py-0.5 rounded">{'{notizen}'}</code>
+        </p>
+        <Field label="Telefonnummer (für SMS/WhatsApp)">
+          <input
+            className="form-input w-full"
+            value={settings.cleaning_notification?.phone || ''}
+            onChange={e => setCleaningNotif('phone', e.target.value)}
+            placeholder="z. B. +49 170 1234567"
+          />
+        </Field>
+        <Field label="Textvorlage">
+          <textarea
+            className="form-input w-full"
+            rows={4}
+            value={settings.cleaning_notification?.template || ''}
+            onChange={e => setCleaningNotif('template', e.target.value)}
           />
         </Field>
       </Section>

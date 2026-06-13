@@ -57,6 +57,14 @@ function loadCleaningExclusions() {
 }
 function saveCleaningExclusionsToStorage(m) { localStorage.setItem('cleaning_exclusions', JSON.stringify(m)); }
 
+function loadCleaningDetails() {
+  try { return JSON.parse(localStorage.getItem('cleaning_details') || '{}'); } catch { return {}; }
+}
+function saveCleaningDetailsToStorage(m) { localStorage.setItem('cleaning_details', JSON.stringify(m)); }
+
+const DEFAULT_CLEANING_DETAILS = { scope: 'reinigung', windows: false, deadlineTime: '', durationMin: '', cost: '', notes: '' };
+const CLEANING_SCOPE_LABELS = { grund: 'Grundreinigung', reinigung: 'Reinigung', bettwaesche: 'Bettwäsche-Wechsel' };
+
 // ── DAY_COL_W: pixel width of each day column
 const DAY_COL_W = 38;
 const ROW_H = 56; // px, height of each house row
@@ -73,6 +81,8 @@ export default function CalendarPage() {
   const [cleaningMarkers, setCleaningMarkers] = useState(loadCleaningMarkers);
   const [cleaningModal, setCleaningModal] = useState(null);
   const [cleaningExclusions, setCleaningExclusions] = useState(loadCleaningExclusions);
+  const [cleaningDetailsMap, setCleaningDetailsMap] = useState(loadCleaningDetails);
+  const [cleaningForm, setCleaningForm] = useState(DEFAULT_CLEANING_DETAILS);
   const [tasksVersion, setTasksVersion] = useState(0);
   const [tooltip, setTooltip] = useState(null); // { booking, x, y }
   const containerRef = useRef(null);
@@ -175,10 +185,26 @@ export default function CalendarPage() {
       if (e.detail?.type === 'cleaning') {
         setCleaningMarkers(loadCleaningMarkers());
         setCleaningExclusions(loadCleaningExclusions());
+        setCleaningDetailsMap(loadCleaningDetails());
         setTasksVersion(v => v + 1);
       }
     });
   }, []);
+
+  const saveCleaningDetails = (houseId, ds, details) => {
+    const key = `${houseId}_${ds}`;
+    const updated = { ...cleaningDetailsMap, [key]: details };
+    setCleaningDetailsMap(updated);
+    saveCleaningDetailsToStorage(updated);
+    emitDataChange({ type: 'cleaning' });
+  };
+
+  // Opens the cleaning modal and pre-fills the detail form from any saved cleaning_details
+  const openCleaningModal = (args) => {
+    const key = `${args.houseId}_${args.date}`;
+    setCleaningForm({ ...DEFAULT_CLEANING_DETAILS, ...(cleaningDetailsMap[key] || {}) });
+    setCleaningModal(args);
+  };
 
   const VISIBLE = ['bestaetigt','eingecheckt','ausgecheckt','angefragt','gesperrt'];
 
@@ -309,7 +335,7 @@ export default function CalendarPage() {
                             className={`border-r border-gray-100 cursor-pointer
                               ${today ? '' : isWe ? 'bg-gray-100/30' : ''}`}
                             title={cs ? `🧹 Reinigung (${cs.status}) – klicken` : excludedBookingId ? 'Reinigung entfernt – klicken zum Wiederherstellen' : 'Klicken = Reinigungstag markieren'}
-                            onClick={() => setCleaningModal({ houseId: house.id, houseName: house.name, date: ds, alreadySet: cs !== null, status: cs?.status, bookingId: cs?.bookingId ?? null, excludedBookingId })}
+                            onClick={() => openCleaningModal({ houseId: house.id, houseName: house.name, date: ds, alreadySet: cs !== null, status: cs?.status, bookingId: cs?.bookingId ?? null, excludedBookingId })}
                           >
                             {today && <div className="absolute top-0 bottom-0 left-0 w-1 bg-violet-500" />}
                             {cs && (
@@ -326,7 +352,7 @@ export default function CalendarPage() {
                                 title={`🧹 Reinigung (${cs.status}) – klicken`}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setCleaningModal({ houseId: house.id, houseName: house.name, date: ds, alreadySet: true, status: cs.status, bookingId: cs.bookingId, excludedBookingId: null });
+                                  openCleaningModal({ houseId: house.id, houseName: house.name, date: ds, alreadySet: true, status: cs.status, bookingId: cs.bookingId, excludedBookingId: null });
                                 }}
                               >
                                 🧹
@@ -560,53 +586,104 @@ export default function CalendarPage() {
           style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}
           onClick={() => setCleaningModal(null)}
         >
-          <div className="card" style={{ minWidth: 320, maxWidth: 400, padding: 24 }} onClick={e => e.stopPropagation()}>
+          <div className="card" style={{ minWidth: 340, maxWidth: 440, padding: 24 }} onClick={e => e.stopPropagation()}>
             <h3 className="text-base font-semibold text-gray-900 mb-1">🧹 Reinigung – {cleaningModal.houseName}</h3>
             <p className="text-sm text-gray-500 mb-4">{cleaningModal.date}</p>
+
+            {cleaningModal.alreadySet && cleaningModal.bookingId && (
+              <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-4">
+                Reinigung zum Checkout dieser Buchung – Status: {{ planned: 'Geplant', organized: 'Organisiert', done: 'Erledigt' }[cleaningModal.status] || cleaningModal.status}
+              </p>
+            )}
+            {cleaningModal.alreadySet && !cleaningModal.bookingId && (
+              <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-4">Bereits als Reinigungstag markiert.</p>
+            )}
+            {!cleaningModal.alreadySet && cleaningModal.excludedBookingId && (
+              <p className="text-sm text-gray-600 mb-4">Die Reinigung zum Checkout dieser Buchung wurde entfernt.</p>
+            )}
+            {!cleaningModal.alreadySet && !cleaningModal.excludedBookingId && (
+              <p className="text-sm text-gray-600 mb-4">Soll dieser Tag als Reinigungstag markiert werden?</p>
+            )}
+
+            {/* ── Detail-Formular ── */}
+            <div className="space-y-3 mb-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Uhrzeit (Deadline)</label>
+                  <input type="time" className="form-input w-full text-sm"
+                    value={cleaningForm.deadlineTime}
+                    onChange={e => setCleaningForm(f => ({ ...f, deadlineTime: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Umfang</label>
+                  <select className="form-input w-full text-sm"
+                    value={cleaningForm.scope}
+                    onChange={e => setCleaningForm(f => ({ ...f, scope: e.target.value }))}>
+                    <option value="grund">Grundreinigung</option>
+                    <option value="reinigung">Reinigung</option>
+                    <option value="bettwaesche">Bettwäsche-Wechsel</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Dauer (Minuten)</label>
+                  <input type="number" min="0" className="form-input w-full text-sm"
+                    value={cleaningForm.durationMin}
+                    onChange={e => setCleaningForm(f => ({ ...f, durationMin: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Kosten (€)</label>
+                  <input type="number" min="0" step="0.01" className="form-input w-full text-sm"
+                    value={cleaningForm.cost}
+                    onChange={e => setCleaningForm(f => ({ ...f, cost: e.target.value }))} />
+                </div>
+              </div>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" checked={cleaningForm.windows}
+                  onChange={e => setCleaningForm(f => ({ ...f, windows: e.target.checked }))} />
+                🪟 Fenster putzen
+              </label>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Notizen</label>
+                <textarea className="form-input w-full text-sm" rows={2}
+                  value={cleaningForm.notes}
+                  onChange={e => setCleaningForm(f => ({ ...f, notes: e.target.value }))} />
+              </div>
+            </div>
+
             {cleaningModal.alreadySet && cleaningModal.bookingId ? (
-              <>
-                <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-4">
-                  Reinigung zum Checkout dieser Buchung – Status: {{ planned: 'Geplant', organized: 'Organisiert', done: 'Erledigt' }[cleaningModal.status] || cleaningModal.status}
-                </p>
-                <div className="flex flex-wrap gap-2 justify-end">
-                  <button className="btn-secondary text-sm" onClick={() => setCleaningModal(null)}>Abbrechen</button>
-                  {cleaningModal.status !== 'planned' && (
-                    <button className="btn-secondary text-sm" onClick={() => { setBookingCleaningFlags(cleaningModal.bookingId, { org: false, done: false }); setCleaningModal(null); }}>↺ Zurücksetzen</button>
-                  )}
-                  {cleaningModal.status === 'planned' && (
-                    <button className="btn-primary text-sm" style={{ backgroundColor: '#f59e0b', borderColor: '#f59e0b' }} onClick={() => { setBookingCleaningFlags(cleaningModal.bookingId, { org: true, done: false }); setCleaningModal(null); }}>📋 Als organisiert markieren</button>
-                  )}
-                  {cleaningModal.status !== 'done' && (
-                    <button className="btn-primary text-sm bg-green-600 hover:bg-green-700" onClick={() => { setBookingCleaningFlags(cleaningModal.bookingId, { org: true, done: true }); setCleaningModal(null); }}>✅ Als erledigt markieren</button>
-                  )}
-                  <button className="btn-primary text-sm bg-red-600 hover:bg-red-700" onClick={() => { excludeBookingCleaning(cleaningModal.houseId, cleaningModal.date); setCleaningModal(null); }}>🗑 Komplett löschen</button>
-                </div>
-              </>
+              <div className="flex flex-wrap gap-2 justify-end">
+                <button className="btn-secondary text-sm" onClick={() => setCleaningModal(null)}>Abbrechen</button>
+                <button className="btn-secondary text-sm" onClick={() => { saveCleaningDetails(cleaningModal.houseId, cleaningModal.date, cleaningForm); setCleaningModal(null); }}>💾 Speichern</button>
+                {cleaningModal.status !== 'planned' && (
+                  <button className="btn-secondary text-sm" onClick={() => { saveCleaningDetails(cleaningModal.houseId, cleaningModal.date, cleaningForm); setBookingCleaningFlags(cleaningModal.bookingId, { org: false, done: false }); setCleaningModal(null); }}>↺ Zurücksetzen</button>
+                )}
+                {cleaningModal.status === 'planned' && (
+                  <button className="btn-primary text-sm" style={{ backgroundColor: '#f59e0b', borderColor: '#f59e0b' }} onClick={() => { saveCleaningDetails(cleaningModal.houseId, cleaningModal.date, cleaningForm); setBookingCleaningFlags(cleaningModal.bookingId, { org: true, done: false }); setCleaningModal(null); }}>📋 Als organisiert markieren</button>
+                )}
+                {cleaningModal.status !== 'done' && (
+                  <button className="btn-primary text-sm bg-green-600 hover:bg-green-700" onClick={() => { saveCleaningDetails(cleaningModal.houseId, cleaningModal.date, cleaningForm); setBookingCleaningFlags(cleaningModal.bookingId, { org: true, done: true }); setCleaningModal(null); }}>✅ Als erledigt markieren</button>
+                )}
+                <button className="btn-primary text-sm bg-red-600 hover:bg-red-700" onClick={() => { excludeBookingCleaning(cleaningModal.houseId, cleaningModal.date); setCleaningModal(null); }}>🗑 Komplett löschen</button>
+              </div>
             ) : cleaningModal.alreadySet ? (
-              <>
-                <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-4">Bereits als Reinigungstag markiert.</p>
-                <div className="flex gap-3 justify-end">
-                  <button className="btn-secondary text-sm" onClick={() => setCleaningModal(null)}>Abbrechen</button>
-                  <button className="btn-primary text-sm bg-red-600 hover:bg-red-700" onClick={() => { toggleCleaning(cleaningModal.houseId, cleaningModal.date); setCleaningModal(null); }}>🗑 Komplett löschen</button>
-                </div>
-              </>
+              <div className="flex flex-wrap gap-2 justify-end">
+                <button className="btn-secondary text-sm" onClick={() => setCleaningModal(null)}>Abbrechen</button>
+                <button className="btn-secondary text-sm" onClick={() => { saveCleaningDetails(cleaningModal.houseId, cleaningModal.date, cleaningForm); setCleaningModal(null); }}>💾 Speichern</button>
+                <button className="btn-primary text-sm bg-red-600 hover:bg-red-700" onClick={() => { toggleCleaning(cleaningModal.houseId, cleaningModal.date); setCleaningModal(null); }}>🗑 Komplett löschen</button>
+              </div>
             ) : cleaningModal.excludedBookingId ? (
-              <>
-                <p className="text-sm text-gray-600 mb-4">Die Reinigung zum Checkout dieser Buchung wurde entfernt.</p>
-                <div className="flex gap-3 justify-end">
-                  <button className="btn-secondary text-sm" onClick={() => setCleaningModal(null)}>Abbrechen</button>
-                  <button className="btn-primary text-sm" style={{ backgroundColor: '#f59e0b', borderColor: '#f59e0b' }} onClick={() => { restoreBookingCleaning(cleaningModal.houseId, cleaningModal.date); setCleaningModal(null); }}>🔁 Wiederherstellen</button>
-                  <button className="btn-primary text-sm bg-green-600 hover:bg-green-700" onClick={() => { toggleCleaning(cleaningModal.houseId, cleaningModal.date); setCleaningModal(null); }}>🧹 Neu anlegen</button>
-                </div>
-              </>
+              <div className="flex flex-wrap gap-2 justify-end">
+                <button className="btn-secondary text-sm" onClick={() => setCleaningModal(null)}>Abbrechen</button>
+                <button className="btn-primary text-sm" style={{ backgroundColor: '#f59e0b', borderColor: '#f59e0b' }} onClick={() => { saveCleaningDetails(cleaningModal.houseId, cleaningModal.date, cleaningForm); restoreBookingCleaning(cleaningModal.houseId, cleaningModal.date); setCleaningModal(null); }}>🔁 Wiederherstellen</button>
+                <button className="btn-primary text-sm bg-green-600 hover:bg-green-700" onClick={() => { saveCleaningDetails(cleaningModal.houseId, cleaningModal.date, cleaningForm); toggleCleaning(cleaningModal.houseId, cleaningModal.date); setCleaningModal(null); }}>🧹 Neu anlegen</button>
+              </div>
             ) : (
-              <>
-                <p className="text-sm text-gray-600 mb-4">Soll dieser Tag als Reinigungstag markiert werden?</p>
-                <div className="flex gap-3 justify-end">
-                  <button className="btn-secondary text-sm" onClick={() => setCleaningModal(null)}>Abbrechen</button>
-                  <button className="btn-primary text-sm" style={{ backgroundColor: '#f59e0b', borderColor: '#f59e0b' }} onClick={() => { toggleCleaning(cleaningModal.houseId, cleaningModal.date); setCleaningModal(null); }}>🧹 Reinigungstag markieren</button>
-                </div>
-              </>
+              <div className="flex flex-wrap gap-2 justify-end">
+                <button className="btn-secondary text-sm" onClick={() => setCleaningModal(null)}>Abbrechen</button>
+                <button className="btn-primary text-sm" style={{ backgroundColor: '#f59e0b', borderColor: '#f59e0b' }} onClick={() => { saveCleaningDetails(cleaningModal.houseId, cleaningModal.date, cleaningForm); toggleCleaning(cleaningModal.houseId, cleaningModal.date); setCleaningModal(null); }}>🧹 Reinigungstag markieren</button>
+              </div>
             )}
           </div>
         </div>
