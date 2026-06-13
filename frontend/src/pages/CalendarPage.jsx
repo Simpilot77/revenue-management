@@ -66,6 +66,7 @@ export default function CalendarPage() {
   const [bookings, setBookings] = useState([]);
   const [cleaningMarkers, setCleaningMarkers] = useState(loadCleaningMarkers);
   const [cleaningModal, setCleaningModal] = useState(null);
+  const [tasksVersion, setTasksVersion] = useState(0);
   const [tooltip, setTooltip] = useState(null); // { booking, x, y }
   const containerRef = useRef(null);
 
@@ -96,17 +97,17 @@ export default function CalendarPage() {
         const cd = b.cleaning_date?.slice(0,10) || b.checkout_date?.slice(0,10);
         if (cd !== ds) continue;
         const bt = tasks[b.id] || {};
-        if (bt.cleaning_done) return 'done';
-        if (bt.cleaning_org)  return 'organized';
-        return 'planned';
+        if (bt.cleaning_done) return { status: 'done', bookingId: b.id };
+        if (bt.cleaning_org)  return { status: 'organized', bookingId: b.id };
+        return { status: 'planned', bookingId: b.id };
       }
-      if (cleaningMarkers[`${houseId}_${ds}`]) return 'planned';
+      if (cleaningMarkers[`${houseId}_${ds}`]) return { status: 'planned', bookingId: null };
       return null;
     } catch {
-      if (cleaningMarkers[`${houseId}_${ds}`]) return 'planned';
+      if (cleaningMarkers[`${houseId}_${ds}`]) return { status: 'planned', bookingId: null };
       return null;
     }
-  }, [bookings, cleaningMarkers]);
+  }, [bookings, cleaningMarkers, tasksVersion]);
 
   const toggleCleaning = (houseId, ds) => {
     const key = `${houseId}_${ds}`;
@@ -114,6 +115,17 @@ export default function CalendarPage() {
     if (updated[key]) delete updated[key]; else updated[key] = true;
     setCleaningMarkers(updated);
     saveCleaningMarkersToStorage(updated);
+  };
+
+  // Sets the cleaning_org/cleaning_done flags on a booking's task entry
+  // (used when the cleaning indicator is driven by a booking rather than a manual marker)
+  const setBookingCleaningFlags = (bookingId, { org, done }) => {
+    try {
+      const tasks = JSON.parse(localStorage.getItem('booking_tasks') || '{}');
+      tasks[bookingId] = { ...(tasks[bookingId] || {}), cleaning_org: org, cleaning_done: done };
+      localStorage.setItem('booking_tasks', JSON.stringify(tasks));
+    } catch {}
+    setTasksVersion(v => v + 1);
   };
 
   const VISIBLE = ['bestaetigt','eingecheckt','ausgecheckt','angefragt','gesperrt'];
@@ -243,8 +255,8 @@ export default function CalendarPage() {
                             }}
                             className={`border-r border-gray-100 cursor-pointer
                               ${today ? '' : isWe ? 'bg-gray-100/30' : ''}`}
-                            title={cs ? `🧹 Reinigung (${cs}) – klicken` : 'Klicken = Reinigungstag markieren'}
-                            onClick={() => setCleaningModal({ houseId: house.id, houseName: house.name, date: ds, alreadySet: cs !== null })}
+                            title={cs ? `🧹 Reinigung (${cs.status}) – klicken` : 'Klicken = Reinigungstag markieren'}
+                            onClick={() => setCleaningModal({ houseId: house.id, houseName: house.name, date: ds, alreadySet: cs !== null, status: cs?.status, bookingId: cs?.bookingId ?? null })}
                           >
                             {today && <div className="absolute top-0 bottom-0 left-0 w-1 bg-violet-500" />}
                             {cs && (
@@ -253,8 +265,8 @@ export default function CalendarPage() {
                                 width: 14, height: 14, borderRadius: '50%',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 fontSize: '0.6rem', zIndex: 2,
-                                backgroundColor: cs === 'done' ? '#dcfce7' : cs === 'organized' ? '#fef3c7' : '#fee2e2',
-                                border: `1.5px solid ${cs === 'done' ? '#22c55e' : cs === 'organized' ? '#f59e0b' : '#ef4444'}`,
+                                backgroundColor: cs.status === 'done' ? '#dcfce7' : cs.status === 'organized' ? '#fef3c7' : '#fee2e2',
+                                border: `1.5px solid ${cs.status === 'done' ? '#22c55e' : cs.status === 'organized' ? '#f59e0b' : '#ef4444'}`,
                                 boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
                               }}>
                                 🧹
@@ -491,7 +503,25 @@ export default function CalendarPage() {
           <div className="card" style={{ minWidth: 320, maxWidth: 400, padding: 24 }} onClick={e => e.stopPropagation()}>
             <h3 className="text-base font-semibold text-gray-900 mb-1">🧹 Reinigung – {cleaningModal.houseName}</h3>
             <p className="text-sm text-gray-500 mb-4">{cleaningModal.date}</p>
-            {cleaningModal.alreadySet ? (
+            {cleaningModal.alreadySet && cleaningModal.bookingId ? (
+              <>
+                <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-4">
+                  Reinigung zum Checkout dieser Buchung – Status: {{ planned: 'Geplant', organized: 'Organisiert', done: 'Erledigt' }[cleaningModal.status] || cleaningModal.status}
+                </p>
+                <div className="flex flex-wrap gap-2 justify-end">
+                  <button className="btn-secondary text-sm" onClick={() => setCleaningModal(null)}>Abbrechen</button>
+                  {cleaningModal.status !== 'planned' && (
+                    <button className="btn-secondary text-sm" onClick={() => { setBookingCleaningFlags(cleaningModal.bookingId, { org: false, done: false }); setCleaningModal(null); }}>↺ Zurücksetzen</button>
+                  )}
+                  {cleaningModal.status === 'planned' && (
+                    <button className="btn-primary text-sm" style={{ backgroundColor: '#f59e0b', borderColor: '#f59e0b' }} onClick={() => { setBookingCleaningFlags(cleaningModal.bookingId, { org: true, done: false }); setCleaningModal(null); }}>📋 Als organisiert markieren</button>
+                  )}
+                  {cleaningModal.status !== 'done' && (
+                    <button className="btn-primary text-sm bg-green-600 hover:bg-green-700" onClick={() => { setBookingCleaningFlags(cleaningModal.bookingId, { org: true, done: true }); setCleaningModal(null); }}>✅ Als erledigt markieren</button>
+                  )}
+                </div>
+              </>
+            ) : cleaningModal.alreadySet ? (
               <>
                 <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-4">Bereits als Reinigungstag markiert.</p>
                 <div className="flex gap-3 justify-end">
