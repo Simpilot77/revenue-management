@@ -191,8 +191,13 @@ export default function DashboardPage() {
           api.get('/reports/kpis',              { params: { from, to } }),
           api.get('/reports/occupancy-monthly', { params: { from, to } }),
           api.get('/reports/houses',            { params: { from, to } }),
-        ]).then(([k, m, h]) => {
+          api.get('/reports/cashflow',          { params: { from, to } }),
+        ]).then(([k, m, h, cf]) => {
           setKpis(k.data);
+          setCashflow((cf.data || []).map(r => ({
+            ...r,
+            monthLabel: MONTH_NAMES[parseInt(r.month.slice(5, 7)) - 1],
+          })));
           const currentMonthStr2 = `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}`;
           setMonthly(m.data.map(r2 => {
             const monthStr = r2.month?.slice(0,7);

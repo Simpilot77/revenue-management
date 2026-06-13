@@ -436,11 +436,14 @@ export function buildInvoicePreviewData(booking, lang = 'de') {
     col_unit: t.colUnitPrice,
     col_total: t.colTotal,
     qty_unit: t.qty,
-    // Payment
-    payment_text: t.paymentBold(dueDateStr),
-    // AGB
-    agb1: t.agb1,
-    agb2: t.agb2(s.website || 'www.workation-wolfsburg.com'),
+    // Payment — use first preset from settings if available
+    payment_text: (() => {
+      const p = s.invoice_presets?.payments?.[0];
+      return p?.text || t.paymentBold(dueDateStr);
+    })(),
+    // AGB — use first preset from settings if available
+    agb1: s.invoice_presets?.agbs?.[0]?.agb1 || t.agb1,
+    agb2: s.invoice_presets?.agbs?.[0]?.agb2 || t.agb2(s.website || 'www.workation-wolfsburg.com'),
     // Closing
     closing_text: t.closingText,
     closing: t.closing,

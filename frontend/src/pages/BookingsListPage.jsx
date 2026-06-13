@@ -179,7 +179,7 @@ export default function BookingsListPage() {
   const [houses, setHouses] = useState([]);
   const [channels, setChannels] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ search: '', house_id: '', channel_id: '', status: '', from: '', to: '' });
+  const [filters, setFilters] = useState({ search: '', house_id: '', channel_id: '', status: '', payment_status: '', from: '', to: '' });
   const [page, setPage] = useState(1);
   const [sortField, setSortField] = useState('checkin_date');
   const [sortDir, setSortDir] = useState('desc');
@@ -412,7 +412,7 @@ export default function BookingsListPage() {
       )}
 
       {/* Filters */}
-      <div className="card">
+      <div className="card space-y-3">
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           <input className="form-input" placeholder="🔍 Suche…" value={filters.search} onChange={e => setFilter('search', e.target.value)} />
           <select className="form-select" value={filters.house_id} onChange={e => setFilter('house_id', e.target.value)}>
@@ -427,8 +427,40 @@ export default function BookingsListPage() {
             <option value="">Alle Status</option>
             {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
-          <input type="date" className="form-input" value={filters.from} onChange={e => setFilter('from', e.target.value)} title="Von (Anreise)" />
-          <input type="date" className="form-input" value={filters.to} onChange={e => setFilter('to', e.target.value)} title="Bis (Anreise)" />
+          <select className="form-select" value={filters.payment_status} onChange={e => setFilter('payment_status', e.target.value)}>
+            <option value="">Alle Zahlungen</option>
+            {Object.entries(PAYMENT_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+          <div className="flex gap-2">
+            <input type="date" className="form-input flex-1" value={filters.from} onChange={e => setFilter('from', e.target.value)} title="Von (Anreise)" />
+            <input type="date" className="form-input flex-1" value={filters.to} onChange={e => setFilter('to', e.target.value)} title="Bis (Anreise)" />
+          </div>
+        </div>
+        {/* Quick filters */}
+        <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-gray-100">
+          <span className="text-xs text-gray-400">Schnellfilter:</span>
+          <button
+            type="button"
+            className={`text-xs px-3 py-1 rounded-full font-medium transition-colors ${filters.payment_status === 'offen' && filters.status === 'bestaetigt' ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200'}`}
+            onClick={() => {
+              if (filters.payment_status === 'offen' && filters.status === 'bestaetigt') {
+                setFilters(f => ({ ...f, payment_status: '', status: '' }));
+              } else {
+                setFilters(f => ({ ...f, payment_status: 'offen', status: 'bestaetigt' }));
+                setPage(1);
+              }
+            }}
+          >
+            💰 Offene Posten
+          </button>
+          <button
+            type="button"
+            className={`text-xs px-3 py-1 rounded-full font-medium transition-colors ${!Object.values(filters).some(Boolean) ? 'bg-gray-200 text-gray-500 cursor-default' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            onClick={() => { setFilters({ search: '', house_id: '', channel_id: '', status: '', payment_status: '', from: '', to: '' }); setPage(1); }}
+            disabled={!Object.values(filters).some(Boolean)}
+          >
+            ✕ Filter zurücksetzen
+          </button>
         </div>
       </div>
 
@@ -480,6 +512,11 @@ export default function BookingsListPage() {
                       >
                         ✏ Bearbeiten
                       </button>
+                      <button
+                        onClick={() => navigate('/tasks')}
+                        className="text-base leading-none text-blue-400 hover:text-blue-600"
+                        title="Aufgaben anzeigen"
+                      >📋</button>
                       <button
                         onClick={() => handleToggleStats(b)}
                         title={b.included_in_stats === false ? 'Nicht in Auswertung – klicken zum Aktivieren' : 'In Auswertung – klicken zum Deaktivieren'}

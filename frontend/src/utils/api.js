@@ -108,7 +108,8 @@ api.interceptors.request.use((config) => {
     if (params.to)   filtered = filtered.filter(b => b.checkin_date  <= params.to);
     if (params.house_id)   filtered = filtered.filter(b => b.house_id === parseInt(params.house_id));
     if (params.channel_id) filtered = filtered.filter(b => b.channel_id === parseInt(params.channel_id));
-    if (params.status)     filtered = filtered.filter(b => b.status === params.status);
+    if (params.status)         filtered = filtered.filter(b => b.status === params.status);
+    if (params.payment_status) filtered = filtered.filter(b => b.payment_status === params.payment_status);
     if (params.search) {
       const q = params.search.toLowerCase();
       filtered = filtered.filter(b =>

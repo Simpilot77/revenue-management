@@ -1056,12 +1056,13 @@ function ZuErledigenpanel({ bookings }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function TasksPage() {
-  const [houses, setHouses]     = useState([]);
-  const [bookings, setBookings] = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const [filter, setFilter]     = useState('current');
-  const [tab, setTab]           = useState('tasks'); // 'tasks' | 'todo'
-  const [, rerender]            = useState(0);
+  const [houses, setHouses]       = useState([]);
+  const [bookings, setBookings]   = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [filter, setFilter]       = useState('current');
+  const [houseFilter, setHouseFilter] = useState(''); // '' = all houses
+  const [tab, setTab]             = useState('tasks'); // 'tasks' | 'todo'
+  const [, rerender]              = useState(0);
 
   const today  = new Date().toISOString().slice(0, 10);
   const past30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
@@ -1114,6 +1115,7 @@ export default function TasksPage() {
   const activeFilter = FILTERS.find(f => f.key === filter);
   const filteredBookings = bookings
     .filter(activeFilter?.fn || (() => true))
+    .filter(b => !houseFilter || b.house_id === parseInt(houseFilter))
     .sort((a, b) => {
       const aA = a.checkin_date?.slice(0,10) <= today && a.checkout_date?.slice(0,10) >= today;
       const bA = b.checkin_date?.slice(0,10) <= today && b.checkout_date?.slice(0,10) >= today;
@@ -1206,7 +1208,17 @@ export default function TasksPage() {
       {tab === 'tasks' && (
         <section>
           <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
-            <div className="flex gap-1.5 flex-wrap">
+            <div className="flex gap-1.5 flex-wrap items-center">
+              {houses.length > 1 && (
+                <select
+                  className="form-select text-xs py-1 h-7 border-gray-200 rounded-full"
+                  value={houseFilter}
+                  onChange={e => setHouseFilter(e.target.value)}
+                >
+                  <option value="">🏠 Alle Häuser</option>
+                  {houses.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
+                </select>
+              )}
               {FILTERS.map(({ key, label }) => {
                 const count = key === 'overdue'
                   ? overdueTotal
