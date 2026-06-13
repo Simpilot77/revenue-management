@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { formatCurrency } from '../utils/format';
+import { emitDataChange, onDataChange } from '../utils/syncBus';
 
 function getDaysInMonth(year, month) {
   return new Date(year, month + 1, 0).getDate();
@@ -133,6 +134,8 @@ export default function CalendarPage() {
     if (updated[key]) delete updated[key]; else updated[key] = true;
     setCleaningMarkers(updated);
     saveCleaningMarkersToStorage(updated);
+    setTasksVersion(v => v + 1);
+    emitDataChange({ type: 'cleaning' });
   };
 
   const excludeBookingCleaning = (houseId, ds) => {
@@ -140,6 +143,8 @@ export default function CalendarPage() {
     const updated = { ...cleaningExclusions, [key]: true };
     setCleaningExclusions(updated);
     saveCleaningExclusionsToStorage(updated);
+    setTasksVersion(v => v + 1);
+    emitDataChange({ type: 'cleaning' });
   };
 
   const restoreBookingCleaning = (houseId, ds) => {
@@ -148,6 +153,8 @@ export default function CalendarPage() {
     delete updated[key];
     setCleaningExclusions(updated);
     saveCleaningExclusionsToStorage(updated);
+    setTasksVersion(v => v + 1);
+    emitDataChange({ type: 'cleaning' });
   };
 
   // Sets the cleaning_org/cleaning_done flags on a booking's task entry
@@ -159,7 +166,19 @@ export default function CalendarPage() {
       localStorage.setItem('booking_tasks', JSON.stringify(tasks));
     } catch {}
     setTasksVersion(v => v + 1);
+    emitDataChange({ type: 'cleaning' });
   };
+
+  // Re-evaluate cleaning state when other pages (e.g. Reinigungsmanagement, Aufgaben) change it
+  useEffect(() => {
+    return onDataChange((e) => {
+      if (e.detail?.type === 'cleaning') {
+        setCleaningMarkers(loadCleaningMarkers());
+        setCleaningExclusions(loadCleaningExclusions());
+        setTasksVersion(v => v + 1);
+      }
+    });
+  }, []);
 
   const VISIBLE = ['bestaetigt','eingecheckt','ausgecheckt','angefragt','gesperrt'];
 
@@ -294,15 +313,22 @@ export default function CalendarPage() {
                           >
                             {today && <div className="absolute top-0 bottom-0 left-0 w-1 bg-violet-500" />}
                             {cs && (
-                              <div style={{
-                                position: 'absolute', top: 2, right: 2,
-                                width: 14, height: 14, borderRadius: '50%',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                fontSize: '0.6rem', zIndex: 2,
-                                backgroundColor: cs.status === 'done' ? '#dcfce7' : cs.status === 'organized' ? '#fef3c7' : '#fee2e2',
-                                border: `1.5px solid ${cs.status === 'done' ? '#22c55e' : cs.status === 'organized' ? '#f59e0b' : '#ef4444'}`,
-                                boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
-                              }}>
+                              <div
+                                style={{
+                                  position: 'absolute', top: 2, right: 2,
+                                  width: 14, height: 14, borderRadius: '50%',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  fontSize: '0.6rem', zIndex: 6, cursor: 'pointer', pointerEvents: 'auto',
+                                  backgroundColor: cs.status === 'done' ? '#dcfce7' : cs.status === 'organized' ? '#fef3c7' : '#fee2e2',
+                                  border: `1.5px solid ${cs.status === 'done' ? '#22c55e' : cs.status === 'organized' ? '#f59e0b' : '#ef4444'}`,
+                                  boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
+                                }}
+                                title={`🧹 Reinigung (${cs.status}) – klicken`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setCleaningModal({ houseId: house.id, houseName: house.name, date: ds, alreadySet: true, status: cs.status, bookingId: cs.bookingId, excludedBookingId: null });
+                                }}
+                              >
                                 🧹
                               </div>
                             )}
