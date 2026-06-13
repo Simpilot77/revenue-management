@@ -1073,6 +1073,15 @@ function ZuErledigenpanel({ bookings }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+function useLiveClock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
 export default function TasksPage() {
   const [houses, setHouses]       = useState([]);
   const [bookings, setBookings]   = useState([]);
@@ -1081,6 +1090,7 @@ export default function TasksPage() {
   const [houseFilter, setHouseFilter] = useState(''); // '' = all houses
   const [tab, setTab]             = useState('tasks'); // 'tasks' | 'todo'
   const [, rerender]              = useState(0);
+  const now = useLiveClock();
 
   const today  = new Date().toISOString().slice(0, 10);
   const past30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
@@ -1164,7 +1174,18 @@ export default function TasksPage() {
     <div className="p-6 space-y-6">
       {/* Page header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-2xl font-bold text-gray-900">Aufgaben</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Aufgaben</h1>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-sm font-medium text-gray-600">
+              {now.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+            </span>
+            <span className="text-gray-300">·</span>
+            <span className="text-sm font-mono font-semibold text-blue-700 tabular-nums">
+              {now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </span>
+          </div>
+        </div>
         <div className="flex gap-3 flex-wrap">
           {overdueTotal > 0 && (
             <div className="flex items-center gap-1.5 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5">
@@ -1182,6 +1203,7 @@ export default function TasksPage() {
           </div>
         </div>
       </div>
+
 
       {/* ── House Status ── */}
       <section>
