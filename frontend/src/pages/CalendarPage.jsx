@@ -180,24 +180,24 @@ export default function CalendarPage() {
                   return (
                     <div
                       key={d}
-                      style={{ width: DAY_COL_W, minWidth: DAY_COL_W }}
+                      style={{
+                        width: DAY_COL_W, minWidth: DAY_COL_W,
+                        ...(today ? { backgroundColor: '#a855f7', boxShadow: '0 0 14px 2px rgba(168,85,247,0.6)' } : {}),
+                      }}
                       className={`shrink-0 flex flex-col items-center justify-end pb-1.5 relative
                         ${today ? '' : isWe ? 'bg-gray-100/60' : ''}`}
                     >
-                      {today && (
-                        <div className="absolute inset-0 bg-blue-50" />
-                      )}
                       <span className={`relative z-1 text-xs font-bold leading-none
-                        ${today ? 'text-blue-600' : isWe ? 'text-gray-400' : 'text-gray-500'}`}>
+                        ${today ? 'text-white' : isWe ? 'text-gray-400' : 'text-gray-500'}`}>
                         {d}
                       </span>
                       <span className={`relative z-1 mt-0.5 leading-none
-                        ${today ? 'text-blue-400' : 'text-gray-300'}`}
+                        ${today ? 'text-violet-100' : 'text-gray-300'}`}
                         style={{ fontSize: '0.6rem' }}>
                         {DAY_NAMES_SHORT[dow]}
                       </span>
                       {today && (
-                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500" />
+                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-violet-700" />
                       )}
                     </div>
                   );
@@ -233,13 +233,16 @@ export default function CalendarPage() {
                         return (
                           <div
                             key={d}
-                            style={{ width: DAY_COL_W, minWidth: DAY_COL_W, position: 'relative', flexShrink: 0 }}
+                            style={{
+                              width: DAY_COL_W, minWidth: DAY_COL_W, position: 'relative', flexShrink: 0,
+                              ...(today ? { backgroundColor: 'rgba(168,85,247,0.16)', boxShadow: 'inset 0 0 0 1px rgba(168,85,247,0.5)' } : {}),
+                            }}
                             className={`border-r border-gray-100 cursor-pointer
-                              ${today ? 'bg-blue-50/60' : isWe ? 'bg-gray-100/30' : ''}`}
+                              ${today ? '' : isWe ? 'bg-gray-100/30' : ''}`}
                             title={cs ? `🧹 Reinigung (${cs}) – klicken` : 'Klicken = Reinigungstag markieren'}
                             onClick={() => setCleaningModal({ houseId: house.id, houseName: house.name, date: ds, alreadySet: cs !== null })}
                           >
-                            {today && <div className="absolute top-0 bottom-0 left-0 w-0.5 bg-blue-400 opacity-60" />}
+                            {today && <div className="absolute top-0 bottom-0 left-0 w-1 bg-violet-500" />}
                             {cs && (
                               <div className={`absolute inset-0 opacity-20 pointer-events-none
                                 ${cs === 'done' ? 'bg-green-500' : cs === 'organized' ? 'bg-amber-400' : 'bg-red-500'}`} />
@@ -397,7 +400,7 @@ export default function CalendarPage() {
             🧹 Erledigt
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-sm inline-block bg-blue-200 border border-blue-500" />
+            <span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: '#a855f7', boxShadow: '0 0 6px 1px rgba(168,85,247,0.7)' }} />
             Heute
           </span>
           <span className="flex items-center gap-1.5">
@@ -587,17 +590,19 @@ function MiniMonth({ year, month, bookings, navigate, houseId, cleaningMarkers }
                       position: 'relative', height: 16,
                       borderRadius: isMid ? 0 : isCheckin ? '0 3px 3px 0' : '3px 0 0 3px',
                       overflow: 'hidden',
-                      outline: isCurrentDay ? '2px solid #3b82f6' : isCleaning ? '1.5px solid #f59e0b' : 'none',
+                      outline: isCurrentDay ? '2px solid #a855f7' : isCleaning ? '1.5px solid #f59e0b' : 'none',
                       outlineOffset: '-1px',
+                      boxShadow: isCurrentDay ? '0 0 8px 1px rgba(168,85,247,0.7)' : 'none',
                     }}>
                       {isMid && <div style={{ position: 'absolute', inset: 0, backgroundColor: color }} />}
                       {isCheckin && <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top left, #22c55e 50%, transparent 50%)' }} />}
                       {isCheckout && <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom right, #ef4444 50%, transparent 50%)' }} />}
+                      {isCurrentDay && !isMid && <div style={{ position: 'absolute', inset: 0, backgroundColor: '#a855f7', opacity: 0.25 }} />}
                       <div style={{
                         position: 'relative', zIndex: 1, textAlign: 'center',
                         fontSize: '0.6rem', lineHeight: '16px',
                         fontWeight: isCurrentDay ? 700 : 400,
-                        color: isMid ? 'rgba(255,255,255,0.9)' : isCurrentDay ? '#1d4ed8' : isCleaning ? '#b45309' : '#6b7280',
+                        color: isMid ? 'rgba(255,255,255,0.9)' : isCurrentDay ? '#7e22ce' : isCleaning ? '#b45309' : '#6b7280',
                       }}>
                         {isCleaning && !isMid ? '🧹' : isMid && booking?.daily_rate > 0 ? Math.round(booking.daily_rate) : day}
                       </div>
