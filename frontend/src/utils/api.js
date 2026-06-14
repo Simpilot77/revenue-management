@@ -105,8 +105,39 @@ try {
   });
 } catch (_) {}
 
+// ── Persistierter Mock-Zustand (Buchungen/Kunden inkl. lokaler Änderungen) ────
+// Überschreibt sowohl die Seed-Daten als auch einen evtl. älteren Lodgify-Import,
+// da er der zuletzt gespeicherte Stand inklusive aller lokalen Bearbeitungen ist.
+try {
+  const savedBookings = localStorage.getItem('mock_bookings');
+  if (savedBookings) {
+    const parsed = JSON.parse(savedBookings);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      normalizeBookings(parsed);
+      enrichBookings(parsed);
+      BOOKINGS.splice(0, BOOKINGS.length, ...parsed);
+    }
+  }
+} catch (_) {}
+
+try {
+  const savedCustomers = localStorage.getItem('mock_customers');
+  if (savedCustomers) {
+    const parsed = JSON.parse(savedCustomers);
+    if (Array.isArray(parsed)) _customers.splice(0, _customers.length, ...parsed);
+  }
+} catch (_) {}
+
 // Apply manual field overrides (always – works for both mock and Lodgify data)
 applyManualOverrides(BOOKINGS);
+
+/** Persistiert den aktuellen Stand von BOOKINGS und _customers in localStorage. */
+export function persistMockState() {
+  try {
+    localStorage.setItem('mock_bookings', JSON.stringify(BOOKINGS));
+    localStorage.setItem('mock_customers', JSON.stringify(_customers));
+  } catch (_) {}
+}
 
 const MOCK = true; // set to false when backend is live
 
@@ -207,6 +238,7 @@ api.interceptors.request.use((config) => {
         BOOKINGS[idx]._manual_modified_at   = moMap[id].modified_at;
       }
       data = BOOKINGS[idx];
+      persistMockState();
     } else {
       data = null;
     }
@@ -221,6 +253,38 @@ api.interceptors.request.use((config) => {
     const b = BOOKINGS.find(b => b.id === id);
     if (b) { delete b._has_manual_overrides; delete b._manual_fields; delete b._manual_modified_at; }
     data = { success: true };
+    persistMockState();
+  }
+
+  // Unlock a single manually-overridden field for a booking
+  else if (/^bookings\/\d+\/unlock-field$/.test(url) && config.method === 'delete') {
+    const id = parseInt(url.split('/')[1]);
+    const field = params.field;
+    const moMap = loadManualOverrides();
+    if (moMap[id] && field in moMap[id].fields) {
+      delete moMap[id].fields[field];
+      if (Object.keys(moMap[id].fields).length === 0) {
+        delete moMap[id];
+      } else {
+        moMap[id].modified_at = new Date().toISOString();
+      }
+      saveManualOverrides(moMap);
+      const b = BOOKINGS.find(b => b.id === id);
+      if (b) {
+        const ov = moMap[id];
+        if (ov && Object.keys(ov.fields).length > 0) {
+          b._has_manual_overrides = true;
+          b._manual_fields        = Object.keys(ov.fields);
+          b._manual_modified_at   = ov.modified_at;
+        } else {
+          delete b._has_manual_overrides;
+          delete b._manual_fields;
+          delete b._manual_modified_at;
+        }
+      }
+    }
+    data = { success: true };
+    persistMockState();
   }
 
   // Delete booking
@@ -229,6 +293,7 @@ api.interceptors.request.use((config) => {
     const idx = BOOKINGS.findIndex(b => b.id === id);
     if (idx >= 0) BOOKINGS.splice(idx, 1);
     data = { success: true };
+    persistMockState();
   }
 
   // Create booking
@@ -238,6 +303,7 @@ api.interceptors.request.use((config) => {
     const newBooking = { ...body, id: newId, included_in_stats: body.included_in_stats ?? true };
     BOOKINGS.push(newBooking);
     data = newBooking;
+    persistMockState();
   }
 
   // Drill-down: fetch bookings by IDs
@@ -342,6 +408,7 @@ api.interceptors.request.use((config) => {
     };
     _customers.push(newCustomer);
     data = newCustomer;
+    persistMockState();
   }
 
   // Update customer
@@ -352,6 +419,7 @@ api.interceptors.request.use((config) => {
     if (idx >= 0) {
       _customers[idx] = { ..._customers[idx], ...body, id };
       data = _customers[idx];
+      persistMockState();
     } else {
       data = null;
     }
@@ -363,6 +431,7 @@ api.interceptors.request.use((config) => {
     const idx = _customers.findIndex(c => c.id === id);
     if (idx >= 0) _customers.splice(idx, 1);
     data = { success: true };
+    persistMockState();
   }
 
   // Lodgify sync
@@ -386,6 +455,7 @@ api.interceptors.request.use((config) => {
           applyManualOverrides(incoming);
           BOOKINGS.splice(0, BOOKINGS.length, ...incoming);
           try { localStorage.setItem('lodgify_bookings', JSON.stringify(incoming)); } catch (_) {}
+          persistMockState();
           const reservations = incoming.filter(b => !b.is_owner_block);
           const blocks       = incoming.filter(b =>  b.is_owner_block);
           const syncedAt = syncData.synced_at ? new Date(syncData.synced_at).toLocaleString('de-DE') : '—';
@@ -425,6 +495,7 @@ api.interceptors.request.use((config) => {
         applyManualOverrides(result.bookings);
         BOOKINGS.splice(0, BOOKINGS.length, ...result.bookings);
         try { localStorage.setItem('lodgify_bookings', JSON.stringify(result.bookings)); } catch (_) {}
+        persistMockState();
         const syncedAt = new Date(result.syncedAt).toLocaleString('de-DE');
         data = {
           imported: result.regular, owner_blocks: result.ownerBlocks,
@@ -512,4 +583,5 @@ export function importDatabase(data) {
       localStorage.removeItem(key);
     }
   }
+  persistMockState();
 }
