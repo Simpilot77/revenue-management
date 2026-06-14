@@ -203,6 +203,7 @@ export default function BookingsListPage() {
   const [duplicateInvoices, setDuplicateInvoices] = useState(new Set()); // booking ids with duplicate invoice numbers
   const [invoiceLang, setInvoiceLang] = useState('de');
   const [editingCell, setEditingCell] = useState(null); // { id, field, value }
+  const [filteredAll, setFilteredAll] = useState([]); // all bookings matching current filters (for analytics)
   const limit = 25;
 
   const refreshInvoiceAnalysis = useCallback((all) => {
@@ -274,6 +275,30 @@ export default function BookingsListPage() {
   }, [filters, page]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    const params = { ...filters, page: 1, limit: 1000 };
+    Object.keys(params).forEach(k => !params[k] && delete params[k]);
+    api.get('/bookings', { params }).then(r => setFilteredAll(r.data.data || []));
+  }, [filters]);
+
+  const analytics = useMemo(() => {
+    const relevant = filteredAll.filter(b => b.included_in_stats !== false);
+    const totalRevenue = relevant.reduce((sum, b) => sum + (b.total_price || 0), 0);
+    const byStatus = {};
+    const byHouse = {};
+    relevant.forEach(b => {
+      byStatus[b.status] = byStatus[b.status] || { count: 0, revenue: 0 };
+      byStatus[b.status].count++;
+      byStatus[b.status].revenue += b.total_price || 0;
+
+      const houseKey = b.house_short || `Haus ${b.house_id}`;
+      byHouse[houseKey] = byHouse[houseKey] || { count: 0, revenue: 0 };
+      byHouse[houseKey].count++;
+      byHouse[houseKey].revenue += b.total_price || 0;
+    });
+    return { count: relevant.length, totalRevenue, byStatus, byHouse };
+  }, [filteredAll]);
 
   useEffect(() => {
     return onDataChange((e) => {
@@ -424,6 +449,46 @@ export default function BookingsListPage() {
         <span>Zelleninhalt anklicken zum direkten Bearbeiten — Enter zum Speichern, Escape zum Abbrechen</span>
       </div>
 
+      {/* Analytics panel */}
+      <div className="card space-y-3">
+        <div className="flex flex-wrap gap-4">
+          <div className="bg-blue-50 rounded-lg px-4 py-2 min-w-[140px]">
+            <div className="text-xs text-gray-500">Buchungen (gefiltert)</div>
+            <div className="text-xl font-bold text-gray-900">{analytics.count}</div>
+          </div>
+          <div className="bg-green-50 rounded-lg px-4 py-2 min-w-[160px]">
+            <div className="text-xs text-gray-500">Umsatz gesamt</div>
+            <div className="text-xl font-bold text-gray-900">{formatCurrency(analytics.totalRevenue)}</div>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-gray-100">
+          <div>
+            <div className="text-xs font-semibold text-gray-500 mb-1">Nach Status</div>
+            <div className="space-y-1">
+              {Object.entries(analytics.byStatus).map(([status, v]) => (
+                <div key={status} className="flex items-center justify-between text-sm">
+                  <span className={`badge ${STATUS_COLORS[status]}`}>{STATUS_LABELS[status] || status}</span>
+                  <span className="text-gray-600">{v.count} · {formatCurrency(v.revenue)}</span>
+                </div>
+              ))}
+              {Object.keys(analytics.byStatus).length === 0 && <div className="text-xs text-gray-400">Keine Daten</div>}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs font-semibold text-gray-500 mb-1">Nach Haus</div>
+            <div className="space-y-1">
+              {Object.entries(analytics.byHouse).map(([house, v]) => (
+                <div key={house} className="flex items-center justify-between text-sm">
+                  <span className="font-medium text-gray-700">{house}</span>
+                  <span className="text-gray-600">{v.count} · {formatCurrency(v.revenue)}</span>
+                </div>
+              ))}
+              {Object.keys(analytics.byHouse).length === 0 && <div className="text-xs text-gray-400">Keine Daten</div>}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {duplicateInvoices.size > 0 && (
         <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-800 space-y-1">
           <div className="font-semibold">🚨 Doppelte Rechnungsnummern erkannt</div>
@@ -523,7 +588,9 @@ export default function BookingsListPage() {
               ) : sortedBookings.map((b, idx) => (
                 <tr
                   key={b.id}
-                  className={`hover:bg-gray-50 ${editingCell?.id === b.id ? 'bg-blue-50/40' : ''} ${duplicateInvoices.has(b.id) ? 'bg-red-50/60' : ''}`}
+                  className={`hover:bg-gray-50 cursor-pointer ${editingCell?.id === b.id ? 'bg-blue-50/40' : ''} ${duplicateInvoices.has(b.id) ? 'bg-red-50/60' : ''}`}
+                  onClick={() => navigate(`/bookings/${b.id}/edit`)}
+                  title="Klicken zum Bearbeiten der Buchung"
                 >
                   {/* Row number */}
                   <td className="px-3 py-2 text-center text-xs text-gray-400 font-mono select-none">

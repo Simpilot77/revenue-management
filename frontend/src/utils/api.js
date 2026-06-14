@@ -5,6 +5,7 @@ import {
   calcLeadTime, calcYoY, calcForecast, calcHouses, calcGuestDistribution, calcCashflow,
 } from './mockData';
 import { runLodgifySync, ENV_API_KEY, ENV_HOUSE_MAP } from './lodgifyClient';
+import { formatDateFull, formatCurrency } from './format';
 
 // In-memory mutable customers array
 let _customers = [...CUSTOMERS];
@@ -188,7 +189,12 @@ api.interceptors.request.use((config) => {
       filtered = filtered.filter(b =>
         b.guest_name?.toLowerCase().includes(q) ||
         b.company_name?.toLowerCase().includes(q) ||
-        b.external_reference?.toLowerCase().includes(q)
+        b.external_reference?.toLowerCase().includes(q) ||
+        b.invoice_number?.toLowerCase().includes(q) ||
+        formatCurrency(b.total_price).toLowerCase().includes(q) ||
+        formatDateFull(b.checkin_date).includes(q) ||
+        formatDateFull(b.checkout_date).includes(q) ||
+        formatDateFull(b.booking_date).includes(q)
       );
     }
     filtered.sort((a, b) => b.checkin_date.localeCompare(a.checkin_date));
