@@ -410,7 +410,11 @@ export default function SettingsPage() {
       </Section>
 
       {/* 6. Häuser */}
-      <Section title="Häuser">
+      <Section title="🏠 Haus-Adressen">
+        <p className="text-sm text-slate-600">
+          Diese Adressen werden im Rechnungstext für das jeweils vermietete Haus verwendet.
+          Die Firmenadresse (siehe oben) erscheint weiterhin nur im Kopfbereich der Rechnung.
+        </p>
         <div className="space-y-4">
           {HOUSES.map(h => (
             <div key={h.id} className="border border-slate-200 rounded-lg p-4 space-y-3">

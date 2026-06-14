@@ -285,6 +285,15 @@ export async function exportBookingsList(bookings, filters = {}) {
 
 // ─── 2. Einzelrechnung / Buchungsbeleg ──────────────────────────────────────
 
+// Splits "Straße 15, 38440 Wolfsburg" into { street, zipCity }.
+function splitHouseAddress(addr) {
+  const commaIdx = addr.lastIndexOf(',');
+  if (commaIdx > -1) {
+    return { street: addr.slice(0, commaIdx).trim(), zipCity: addr.slice(commaIdx + 1).trim() };
+  }
+  return { street: addr, zipCity: '' };
+}
+
 function getCompanySettings() {
   try {
     const raw = localStorage.getItem('company_settings');
@@ -370,19 +379,14 @@ export function buildInvoicePreviewData(booking, lang = 'de') {
     const houseAddr = houseSettings?.address || '';
     if (houseAddr) {
       // Format: "Laagbergstraße 15b, 38440 Wolfsburg"
-      const commaIdx = houseAddr.lastIndexOf(',');
-      if (commaIdx > -1) {
-        billingStreet = houseAddr.slice(0, commaIdx).trim();
-        const rest = houseAddr.slice(commaIdx + 1).trim(); // "38440 Wolfsburg"
-        const spaceIdx = rest.indexOf(' ');
-        if (spaceIdx > -1) {
-          billingZip  = rest.slice(0, spaceIdx).trim();
-          billingCity = rest.slice(spaceIdx + 1).trim();
-        } else {
-          billingCity = rest;
-        }
+      const { street, zipCity } = splitHouseAddress(houseAddr);
+      billingStreet = street;
+      const spaceIdx = zipCity.indexOf(' ');
+      if (spaceIdx > -1) {
+        billingZip  = zipCity.slice(0, spaceIdx).trim();
+        billingCity = zipCity.slice(spaceIdx + 1).trim();
       } else {
-        billingStreet = houseAddr;
+        billingCity = zipCity;
       }
       billingCountry = ba.country || s.country || 'Deutschland';
       // c/o line: the guest is reachable via the company at the house address
@@ -411,7 +415,14 @@ export function buildInvoicePreviewData(booking, lang = 'de') {
     contact_person: s.owner_name || 'Nils Flegel',
     // Text
     salutation: t.salutation,
-    intro_line1: t.introLine1(s.company_name, s.street, `${s.zip} ${s.city}`),
+    intro_line1: (() => {
+      const houseAddr = s.houses?.[booking.house_id]?.address || '';
+      if (houseAddr) {
+        const { street, zipCity } = splitHouseAddress(houseAddr);
+        return t.introLine1(s.company_name, street, zipCity || `${s.zip} ${s.city}`);
+      }
+      return t.introLine1(s.company_name, s.street, `${s.zip} ${s.city}`);
+    })(),
     intro_line2: t.introLine2,
     // Line items
     accommodation_desc: t.accommodation,
