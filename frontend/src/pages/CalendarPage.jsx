@@ -80,6 +80,7 @@ export default function CalendarPage() {
   const [cleaningForm, setCleaningForm] = useState(DEFAULT_CLEANING_DETAILS);
   const [tasksVersion, setTasksVersion] = useState(0);
   const [tooltip, setTooltip] = useState(null); // { booking, x, y }
+  const [readinessPopup, setReadinessPopup] = useState(null); // { booking, items, rect }
   const containerRef = useRef(null);
 
   const daysInMonth = getDaysInMonth(year, month);
@@ -120,6 +121,29 @@ export default function CalendarPage() {
     if (cleaningMarkers[key]) return { status: 'planned', bookingId: null };
     return null;
   }, [bookings, cleaningMarkers, cleaningExclusions, tasksVersion]);
+
+  // Open pre-check-in items for a booking: communication tasks (own checklist) plus the
+  // cleaning that takes place before this booking's check-in (same house, date = check-in date).
+  const getPreCheckinOpenItems = useCallback((b) => {
+    const open = [];
+    let tasks = {};
+    try { tasks = JSON.parse(localStorage.getItem('booking_tasks') || '{}')[b.id] || {}; } catch {}
+    if (!tasks.welcome) open.push('✉️ Willkommensnachricht');
+    if (!tasks.pin)     open.push('🔑 PIN-Code übermittelt und aktiviert');
+    if (!tasks.guests)  open.push('👥 Gästeregistrierung vollständig');
+
+    const ci = b.checkin_date?.slice(0, 10);
+    const cs = getCleaningStatus(b.house_id, ci);
+    if (cs) {
+      if (cs.status !== 'done') {
+        open.push('🧹 Reinigung abgeschlossen');
+      } else {
+        const details = cleaningDetailsMap[`${b.house_id}_${ci}`];
+        if (!details?.cleanerConfirmed) open.push('✅ Reinigungskraft bestätigt');
+      }
+    }
+    return open;
+  }, [getCleaningStatus, cleaningDetailsMap]);
 
   // Returns the booking id whose checkout/cleaning cleaning indicator was completely
   // removed (excluded) for this cell, so the modal can offer to restore it
@@ -403,8 +427,31 @@ export default function CalendarPage() {
                             onMouseLeave={() => setTooltip(null)}
                             onClick={(e) => { e.stopPropagation(); navigate(`/bookings/${b.id}/edit`); }}
                           >
-                            {/* Check-in marker — small green dot on the bar's left edge */}
-                            {checkinTriangle && (
+                            {/* Check-in marker — traffic-light arrow: green = bereit, gelb = offene Punkte */}
+                            {checkinTriangle && !isBlock && (() => {
+                              const openItems = getPreCheckinOpenItems(b);
+                              const ready = openItems.length === 0;
+                              return (
+                                <div
+                                  style={{
+                                    position: 'absolute', left: -7, top: '50%', transform: 'translateY(-50%)',
+                                    width: 16, height: 16, borderRadius: '50%',
+                                    background: ready ? '#22c55e' : '#f59e0b', border: '2px solid white',
+                                    boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontSize: '0.6rem', color: 'white', fontWeight: 900,
+                                    zIndex: 7, pointerEvents: 'auto', cursor: 'pointer',
+                                  }}
+                                  title={ready ? '✅ Check-in bereit' : `⚠️ Offene Punkte:\n${openItems.join('\n')}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    setReadinessPopup({ booking: b, items: openItems, rect });
+                                  }}
+                                >→</div>
+                              );
+                            })()}
+                            {checkinTriangle && isBlock && (
                               <div
                                 style={{
                                   position: 'absolute', left: -7, top: '50%', transform: 'translateY(-50%)',
@@ -571,6 +618,45 @@ export default function CalendarPage() {
               </>
             )}
             <div className="text-center text-[10px] text-gray-300 mt-2 pt-1.5 border-t border-gray-100">Klicken zum Bearbeiten</div>
+          </div>
+        );
+      })()}
+
+      {/* ── Check-in-Ampel: offene Punkte ── */}
+      {readinessPopup && (() => {
+        const rect = readinessPopup.rect;
+        const width = 260;
+        let left = rect.left;
+        if (left + width > window.innerWidth - 16) left = Math.max(8, window.innerWidth - width - 16);
+        let top = rect.bottom + 8;
+        return (
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 2100 }}
+            onClick={() => setReadinessPopup(null)}
+          >
+            <div
+              style={{ position: 'fixed', left, top, width, zIndex: 2101 }}
+              className="rounded-xl bg-white shadow-2xl border border-gray-200 p-3.5 text-xs"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="font-semibold text-sm text-gray-900 mb-2">
+                {readinessPopup.items.length === 0 ? '✅ Check-in bereit' : '⚠️ Offene Punkte vor Check-in'}
+              </div>
+              <div className="text-gray-500 mb-2 truncate">{readinessPopup.booking.guest_name}</div>
+              {readinessPopup.items.length > 0 ? (
+                <ul className="space-y-1 mb-2 list-disc list-inside text-gray-700">
+                  {readinessPopup.items.map((it, i) => <li key={i}>{it}</li>)}
+                </ul>
+              ) : (
+                <div className="text-gray-500 mb-2">Alle Vor-Check-in-Aufgaben sind erledigt.</div>
+              )}
+              <button
+                className="text-blue-600 hover:text-blue-800 text-xs font-medium"
+                onClick={() => { navigate(`/bookings/${readinessPopup.booking.id}/edit`); setReadinessPopup(null); }}
+              >
+                Zur Buchung →
+              </button>
+            </div>
           </div>
         );
       })()}
