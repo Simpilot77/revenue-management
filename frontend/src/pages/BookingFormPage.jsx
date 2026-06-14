@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../utils/api';
-import { nightsBetween, formatCurrency, formatDate } from '../utils/format';
+import { nightsBetween, formatCurrency, formatDate, STATUS_LABELS } from '../utils/format';
 import { buildInvoicePreviewData } from '../utils/pdfExport';
 import { splitInvoiceNumber, composeInvoiceNumber } from '../utils/numbering';
 import InvoicePreviewModal from '../components/InvoicePreviewModal';
@@ -91,6 +91,7 @@ export default function BookingFormPage() {
   const [lastInvNum, setLastInvNum] = useState(null); // last issued invoice number for this house
   const [guestChangeModal, setGuestChangeModal] = useState(null); // { payload, otherBookings, guestFields }
   const [depositModal, setDepositModal] = useState(null); // { amount } while editing deposit amount
+  const [statusWarning, setStatusWarning] = useState(null); // Warntext bei Status-Logikcheck
   const cleaningDateTouched = useRef(false);
 
   // ── localStorage helpers for task sync ──
@@ -341,8 +342,28 @@ export default function BookingFormPage() {
     navigate('/bookings');
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  // Prüft, ob der gewählte Status zu den Anreise-/Abreisedaten passt.
+  // Gibt einen Warntext zurück oder null, wenn alles plausibel ist.
+  const checkStatusConsistency = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const ci = form.checkin_date, co = form.checkout_date;
+    if (!ci || !co) return null;
+    if (form.status === 'ausgecheckt' && co > today) {
+      return `Status „${STATUS_LABELS.ausgecheckt}" ist gesetzt, aber das Abreisedatum (${formatDate(co)}) liegt in der Zukunft.`;
+    }
+    if (form.status === 'eingecheckt' && ci > today) {
+      return `Status „${STATUS_LABELS.eingecheckt}" ist gesetzt, aber das Anreisedatum (${formatDate(ci)}) liegt in der Zukunft.`;
+    }
+    if (form.status === 'eingecheckt' && co < today) {
+      return `Status „${STATUS_LABELS.eingecheckt}" ist gesetzt, aber das Abreisedatum (${formatDate(co)}) liegt bereits in der Vergangenheit.`;
+    }
+    if (['bestaetigt', 'angefragt'].includes(form.status) && co < today) {
+      return `Status „${STATUS_LABELS[form.status]}" ist gesetzt, aber der Aufenthalt (bis ${formatDate(co)}) liegt bereits vollständig in der Vergangenheit.`;
+    }
+    return null;
+  };
+
+  const proceedSubmit = async () => {
     setError('');
     setLoading(true);
     try {
@@ -375,6 +396,16 @@ export default function BookingFormPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const warning = checkStatusConsistency();
+    if (warning) {
+      setStatusWarning(warning);
+      return;
+    }
+    await proceedSubmit();
   };
 
   const GUEST_FIELD_LABELS = {
@@ -456,6 +487,37 @@ export default function BookingFormPage() {
               <button
                 className="btn flex-1 bg-white border border-gray-200 hover:bg-gray-50 text-gray-500 py-2 rounded-lg"
                 onClick={() => setGuestChangeModal(null)}
+              >
+                Abbrechen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Status-Logikcheck-Warnung */}
+      {statusWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+            <div className="px-6 pt-6 pb-4 border-b border-gray-100">
+              <h2 className="text-lg font-bold text-gray-900">⚠️ Status prüfen</h2>
+            </div>
+            <div className="px-6 py-4">
+              <p className="text-sm text-gray-700">{statusWarning}</p>
+            </div>
+            <div className="px-6 pb-6 flex flex-col sm:flex-row gap-2">
+              <button
+                className="btn flex-1 bg-blue-700 hover:bg-blue-800 text-white font-semibold py-2 rounded-lg"
+                onClick={async () => {
+                  setStatusWarning(null);
+                  await proceedSubmit();
+                }}
+              >
+                Trotzdem speichern
+              </button>
+              <button
+                className="btn flex-1 bg-white border border-gray-200 hover:bg-gray-50 text-gray-500 py-2 rounded-lg"
+                onClick={() => setStatusWarning(null)}
               >
                 Abbrechen
               </button>
