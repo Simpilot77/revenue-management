@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import api from '../utils/api';
 import { formatCurrency, formatDateFull } from '../utils/format';
 import { onDataChange, emitDataChange } from '../utils/syncBus';
+import { exportCleaningSchedule } from '../utils/pdfExport';
 
 // ─── localStorage helpers (mirrors CalendarPage.jsx) ──────────────────────────
 
@@ -14,7 +15,7 @@ function loadSettings() {
 }
 
 const DEFAULT_DETAILS = { scope: 'reinigung', windows: false, deadlineTime: '', durationMin: '', cost: '', notes: '', cleanerConfirmed: false };
-const SCOPE_LABELS = { grund: 'Grundreinigung', reinigung: 'Reinigung', bettwaesche: 'Bettwäsche-Wechsel' };
+const SCOPE_LABELS = { grund: 'Grundreinigung', reinigung: 'Zwischenreinigung', bettwaesche: 'Bettwäsche-Wechsel' };
 const STATUS_LABELS = { planned: 'Geplant', organized: 'Organisiert', done: 'Erledigt' };
 const STATUS_STYLES = {
   planned:   'bg-red-100 text-red-700',
@@ -24,13 +25,14 @@ const STATUS_STYLES = {
 
 function buildMessage(template, entry) {
   return (template || '')
+    .replace(/\s*·\s*Dauer:\s*{dauer}\s*Min\.\s*·\s*Kosten:\s*{kosten}\s*€/g, '')
+    .replace(/{dauer}/g, '')
+    .replace(/{kosten}/g, '')
     .replace(/{haus}/g, entry.houseName || '')
     .replace(/{datum}/g, formatDateFull(entry.date))
     .replace(/{uhrzeit}/g, entry.deadlineTime || '–')
     .replace(/{umfang}/g, SCOPE_LABELS[entry.scope] || entry.scope || '–')
     .replace(/{fenster}/g, entry.windows ? ' · Fenster putzen' : '')
-    .replace(/{dauer}/g, entry.durationMin || '–')
-    .replace(/{kosten}/g, entry.cost || '0')
     .replace(/{notizen}/g, entry.notes || '–');
 }
 
@@ -190,9 +192,14 @@ export default function CleaningManagementPage() {
 
   return (
     <div className="p-6 space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-gray-900 tracking-tight">🧹 Reinigungsmanagement</h1>
-        <p className="text-xs text-gray-400 mt-0.5">Alle Reinigungen mit Details, Status und SMS/WhatsApp-Benachrichtigung</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900 tracking-tight">🧹 Reinigungsmanagement</h1>
+          <p className="text-xs text-gray-400 mt-0.5">Alle Reinigungen mit Details, Status und SMS/WhatsApp-Benachrichtigung</p>
+        </div>
+        <button className="btn-secondary text-sm" onClick={() => exportCleaningSchedule(filtered)}>
+          📄 PDF Export
+        </button>
       </div>
 
       {/* ── Filters ── */}
@@ -300,7 +307,7 @@ export default function CleaningManagementPage() {
                     value={form.scope}
                     onChange={e => setForm(f => ({ ...f, scope: e.target.value }))}>
                     <option value="grund">Grundreinigung</option>
-                    <option value="reinigung">Reinigung</option>
+                    <option value="reinigung">Zwischenreinigung</option>
                     <option value="bettwaesche">Bettwäsche-Wechsel</option>
                   </select>
                 </div>

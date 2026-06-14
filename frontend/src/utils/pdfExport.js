@@ -1147,6 +1147,55 @@ export async function exportWorkSchedule(items) {
   save(doc, `arbeitsplan_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
+// ─── 5b. Reinigungsplan ─────────────────────────────────────────────────────
+
+const CLEANING_SCOPE_LABELS = { grund: 'Grundreinigung', reinigung: 'Zwischenreinigung', bettwaesche: 'Bettwäsche-Wechsel' };
+const CLEANING_STATUS_LABELS = { planned: 'Geplant', organized: 'Organisiert', done: 'Erledigt' };
+
+export async function exportCleaningSchedule(entries) {
+  if (!entries || entries.length === 0) {
+    alert('Keine Reinigungen im gewählten Zeitraum zum Exportieren vorhanden.');
+    return;
+  }
+  const logo = await getReportLogo();
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  header(doc, 'Reinigungsplan', `Stand ${new Date().toLocaleDateString('de-DE')}`, logo);
+
+  const rows = entries.map(e => [
+    fmtDate(e.date),
+    e.houseName || '—',
+    CLEANING_SCOPE_LABELS[e.scope] || e.scope || '—',
+    e.deadlineTime || '—',
+    e.windows ? 'Ja' : '–',
+    e.notes || '',
+    e.cleanerConfirmed ? '✓ Bestätigt' : (CLEANING_STATUS_LABELS[e.status] || e.status || '—'),
+  ]);
+
+  autoTable(doc, {
+    startY: 30,
+    head: [['Datum', 'Haus', 'Umfang', 'Uhrzeit', 'Fenster putzen', 'Notizen', 'Status/Bestätigung']],
+    body: rows,
+    styles: { fontSize: 9, cellPadding: 2.5, textColor: DARK, overflow: 'linebreak' },
+    headStyles: { fillColor: BLUE, textColor: [255, 255, 255], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: LIGHT },
+    columnStyles: {
+      0: { cellWidth: 22 },
+      1: { cellWidth: 30 },
+      2: { cellWidth: 28 },
+      3: { cellWidth: 18 },
+      4: { cellWidth: 22 },
+      5: { cellWidth: 'auto' },
+      6: { cellWidth: 28 },
+    },
+    margin: { left: 14, right: 14, top: 30 },
+    didDrawPage: (data) => {
+      if (data.pageNumber > 1) header(doc, 'Reinigungsplan', '', logo);
+    },
+  });
+
+  save(doc, `reinigungsplan_${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
 export async function exportHouseComparison(houses, from, to, chartImg = null) {
   const logo = await getReportLogo();
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });

@@ -6,7 +6,7 @@ import InvoicePreviewModal from '../components/InvoicePreviewModal';
 import { applyInvoiceNumber } from '../utils/numbering';
 import { onDataChange, emitDataChange } from '../utils/syncBus';
 
-const SCOPE_LABELS = { grund: 'Grundreinigung', reinigung: 'Reinigung', bettwaesche: 'Bettwäsche-Wechsel' };
+const SCOPE_LABELS = { grund: 'Grundreinigung', reinigung: 'Zwischenreinigung', bettwaesche: 'Bettwäsche-Wechsel' };
 
 function loadCleaningDetailsMap() {
   try { return JSON.parse(localStorage.getItem('cleaning_details') || '{}'); } catch { return {}; }

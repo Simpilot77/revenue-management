@@ -58,7 +58,7 @@ function loadCleaningDetails() {
 function saveCleaningDetailsToStorage(m) { localStorage.setItem('cleaning_details', JSON.stringify(m)); }
 
 const DEFAULT_CLEANING_DETAILS = { scope: 'reinigung', windows: false, deadlineTime: '', durationMin: '', cost: '', notes: '', cleanerConfirmed: false };
-const CLEANING_SCOPE_LABELS = { grund: 'Grundreinigung', reinigung: 'Reinigung', bettwaesche: 'Bettwäsche-Wechsel' };
+const CLEANING_SCOPE_LABELS = { grund: 'Grundreinigung', reinigung: 'Zwischenreinigung', bettwaesche: 'Bettwäsche-Wechsel' };
 
 // ── DAY_COL_W: pixel width of each day column
 const DAY_COL_W = 38;
@@ -701,7 +701,7 @@ export default function CalendarPage() {
                     value={cleaningForm.scope}
                     onChange={e => setCleaningForm(f => ({ ...f, scope: e.target.value }))}>
                     <option value="grund">Grundreinigung</option>
-                    <option value="reinigung">Reinigung</option>
+                    <option value="reinigung">Zwischenreinigung</option>
                     <option value="bettwaesche">Bettwäsche-Wechsel</option>
                   </select>
                 </div>

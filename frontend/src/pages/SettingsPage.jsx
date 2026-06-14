@@ -28,7 +28,7 @@ const DEFAULT_SETTINGS = {
   lodgify_house_map: '',
   cleaning_notification: {
     phone: '',
-    template: 'Reinigung {haus} am {datum} bis {uhrzeit} Uhr · {umfang}{fenster} · Dauer: {dauer} Min. · Kosten: {kosten} €\nNotizen: {notizen}',
+    template: 'Reinigung {haus} am {datum} bis {uhrzeit} Uhr · {umfang}{fenster}\nNotizen: {notizen}',
   },
   invoice_presets: {
     salutations: [
@@ -387,8 +387,6 @@ export default function SettingsPage() {
           <code className="text-xs bg-slate-100 px-1 py-0.5 rounded">{'{uhrzeit}'}</code>{' '}
           <code className="text-xs bg-slate-100 px-1 py-0.5 rounded">{'{umfang}'}</code>{' '}
           <code className="text-xs bg-slate-100 px-1 py-0.5 rounded">{'{fenster}'}</code>{' '}
-          <code className="text-xs bg-slate-100 px-1 py-0.5 rounded">{'{dauer}'}</code>{' '}
-          <code className="text-xs bg-slate-100 px-1 py-0.5 rounded">{'{kosten}'}</code>{' '}
           <code className="text-xs bg-slate-100 px-1 py-0.5 rounded">{'{notizen}'}</code>
         </p>
         <Field label="Telefonnummer (für SMS/WhatsApp)">
