@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { exportInvoiceFromData } from '../utils/pdfExport';
-import { suggestNextInvoiceNumber, suggestNextCustomerNumber, applyBookingNumberField } from '../utils/numbering';
+import { suggestNextInvoiceNumber, suggestNextCustomerNumber, applyBookingNumberField, splitInvoiceNumber, composeInvoiceNumber } from '../utils/numbering';
 
 // ─── Load presets from company_settings ──────────────────────────────────────
 function loadPresets() {
@@ -44,13 +44,6 @@ function fmtForDisplay(iso) {
   return `${d}.${m}.${y}`;
 }
 
-// ─── Parse split invoice number ───────────────────────────────────────────────
-function splitInvNum(invNum) {
-  const m = (invNum || '').match(/^(.*-)(\d{1,4})$/);
-  if (m) return { prefix: m[1], suffix: m[2].padStart(4, '0') };
-  return { prefix: invNum || '', suffix: '' };
-}
-
 // ─── Parse DE date range from service_period ─────────────────────────────────
 function parseServicePeriod(sp) {
   const m = (sp || '').match(/(\d{2})\.(\d{2})\.(\d{4})\s*[–-]\s*(\d{2})\.(\d{2})\.(\d{4})/);
@@ -65,12 +58,12 @@ export default function InvoicePreviewModal({ data, onClose, onLangChange, onCha
   // ── Preset data ──
   const presets = loadPresets();
 
-  // ── Split invoice number state ──
-  const [invNum, setInvNum] = useState(() => splitInvNum(data.invoice_number));
-  const updateInvNum = (prefix, suffix) => {
-    const next = { prefix, suffix };
-    setInvNum(next);
-    set('invoice_number', prefix + suffix);
+  // ── Split invoice number state (Präfix / Jahr / Nr.) ──
+  const [invParts, setInvParts] = useState(() => splitInvoiceNumber(data.invoice_number));
+  const updateInvPart = (part, value) => {
+    const next = { ...invParts, [part]: value };
+    setInvParts(next);
+    set('invoice_number', composeInvoiceNumber(next));
   };
 
   // ── Auto / conflict handling for invoice & customer numbers ──
@@ -80,8 +73,7 @@ export default function InvoicePreviewModal({ data, onClose, onLangChange, onCha
     setAutoLoading(true);
     try {
       const next = await suggestNextInvoiceNumber(data._house_id);
-      const split = splitInvNum(next);
-      setInvNum(split);
+      setInvParts(splitInvoiceNumber(next));
       set('invoice_number', next);
       await commitInvoiceNumber(next);
     } finally { setAutoLoading(false); }
@@ -206,20 +198,33 @@ export default function InvoicePreviewModal({ data, onClose, onLangChange, onCha
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">📋 Rechnungsdaten</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
 
-              {/* Split invoice number */}
+              {/* Split invoice number: Präfix / Jahr / Nr. */}
               <div className="md:col-span-2">
                 <label className="block text-xs font-medium text-gray-500 mb-1">Rechnungsnummer</label>
                 <div className="flex items-center gap-2">
-                  <div className="flex-1">
-                    <label className="block text-xs text-gray-400 mb-0.5">Präfix (editierbar)</label>
+                  <div style={{ width: '90px' }}>
+                    <label className="block text-xs text-gray-400 mb-0.5">Präfix</label>
                     <input
                       className="form-input text-sm w-full font-mono"
-                      value={invNum.prefix}
-                      onChange={e => updateInvNum(e.target.value, invNum.suffix)}
-                      placeholder="15a-2026-"
+                      value={invParts.prefix}
+                      onChange={e => updateInvPart('prefix', e.target.value)}
+                      placeholder="15a"
                     />
                   </div>
-                  <div className="mt-4 text-gray-400 font-bold text-lg">+</div>
+                  <div className="mt-4 text-gray-400 font-bold text-lg">-</div>
+                  <div style={{ width: '80px' }}>
+                    <label className="block text-xs text-gray-400 mb-0.5">Jahr</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={4}
+                      className="form-input text-sm w-full font-mono text-center"
+                      value={invParts.year}
+                      placeholder="2026"
+                      onChange={e => updateInvPart('year', e.target.value.replace(/\D/g, '').slice(0, 4))}
+                    />
+                  </div>
+                  <div className="mt-4 text-gray-400 font-bold text-lg">-</div>
                   <div style={{ width: '110px' }}>
                     <label className="block text-xs text-gray-400 mb-0.5">Nummer (4-stellig)</label>
                     <input
@@ -227,17 +232,16 @@ export default function InvoicePreviewModal({ data, onClose, onLangChange, onCha
                       inputMode="numeric"
                       maxLength={4}
                       className="form-input text-sm w-full font-mono text-center"
-                      value={invNum.suffix}
+                      value={invParts.suffix}
                       placeholder="0042"
-                      onChange={e => {
-                        const s = e.target.value.replace(/\D/g, '').slice(0, 4);
-                        updateInvNum(invNum.prefix, s.padStart(Math.max(s.length, 4), '0').slice(-4));
-                      }}
+                      onChange={e => updateInvPart('suffix', e.target.value.replace(/\D/g, '').slice(0, 4))}
                       onBlur={e => {
                         const s = e.target.value.replace(/\D/g, '').slice(0, 4).padStart(4, '0');
-                        const full = invNum.prefix + s;
-                        updateInvNum(invNum.prefix, s);
-                        commitInvoiceNumber(full);
+                        const next = { ...invParts, suffix: s };
+                        setInvParts(next);
+                        const full = composeInvoiceNumber(next);
+                        set('invoice_number', full);
+                        if (full) commitInvoiceNumber(full);
                       }}
                     />
                   </div>

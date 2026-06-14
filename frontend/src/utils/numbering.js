@@ -13,6 +13,24 @@ export function findConflict(list, field, value, excludeId) {
   return list.find(item => item.id !== excludeId && item[field] && item[field] === value) || null;
 }
 
+// Splits an invoice number "15a-2026-0001" into { prefix: '15a', year: '2026', suffix: '0001' }.
+// Falls back to empty strings for parts that can't be determined.
+export function splitInvoiceNumber(invoiceNumber) {
+  const parts = String(invoiceNumber || '').split('-');
+  if (parts.length >= 3) {
+    return { prefix: parts[0], year: parts[1], suffix: parts.slice(2).join('-') };
+  }
+  return { prefix: '', year: '', suffix: invoiceNumber || '' };
+}
+
+// Reassembles { prefix, year, suffix } into "prefix-year-suffix" (suffix padded to 4 digits).
+// Returns '' if any part is missing.
+export function composeInvoiceNumber({ prefix, year, suffix }) {
+  if (!prefix || !year || !suffix) return '';
+  const paddedSuffix = String(suffix).replace(/[^0-9]/g, '').padStart(4, '0');
+  return `${prefix}-${year}-${paddedSuffix}`;
+}
+
 export async function suggestNextInvoiceNumber(houseId) {
   const { data } = await api.get('/bookings/next-invoice-number', { params: { house_id: houseId } });
   return data.invoice_number;

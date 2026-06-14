@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import api from '../utils/api';
 import { nightsBetween, formatCurrency, formatDate } from '../utils/format';
 import { buildInvoicePreviewData } from '../utils/pdfExport';
+import { splitInvoiceNumber, composeInvoiceNumber } from '../utils/numbering';
 import InvoicePreviewModal from '../components/InvoicePreviewModal';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -245,6 +246,29 @@ export default function BookingFormPage() {
   };
   const setNum = (key, value) => setForm(f => ({ ...f, [key]: value === '' ? '' : Number(value) }));
 
+  // Rechnungsnummer in 3 Felder (Präfix / Jahr / Suffix) aufgeteilt
+  const [invParts, setInvParts] = useState(() => splitInvoiceNumber(form.invoice_number));
+  const lastComposedRef = useRef(composeInvoiceNumber(invParts));
+
+  // Externe Änderungen an form.invoice_number (Laden, Auto-Button) in die 3 Felder übernehmen
+  useEffect(() => {
+    if (form.invoice_number !== lastComposedRef.current) {
+      lastComposedRef.current = form.invoice_number;
+      setInvParts(splitInvoiceNumber(form.invoice_number));
+    }
+  }, [form.invoice_number]);
+
+  // Änderungen an den 3 Feldern wieder zu form.invoice_number zusammensetzen
+  useEffect(() => {
+    const composed = composeInvoiceNumber(invParts);
+    if (composed !== lastComposedRef.current) {
+      lastComposedRef.current = composed;
+      set('invoice_number', composed);
+    }
+  }, [invParts]);
+
+  const setInvPart = (part, value) => setInvParts(prev => ({ ...prev, [part]: value }));
+
   const generateInvoiceNumber = async () => {
     setInvoiceLoading(true);
     try {
@@ -261,7 +285,6 @@ export default function BookingFormPage() {
   const nights = nightsBetween(form.checkin_date, form.checkout_date);
 
   const selectedHouse = houses.find(h => h.id === parseInt(form.house_id));
-  const invoicePrefix = selectedHouse ? `${selectedHouse.house_number}-${new Date().getFullYear()}-` : '';
 
   const selectedChannel = channels.find(c => c.id === parseInt(form.channel_id));
   const autoCommRate = selectedChannel?.commission_rate ?? 0;
@@ -671,23 +694,32 @@ export default function BookingFormPage() {
               <option value="erstattet">Erstattet</option>
             </select>
           </Field>
-          <Field label={`Rechnungsnummer${invoicePrefix ? ` (${invoicePrefix}…)` : ''}`}>
-            <div className="flex gap-2">
-              {invoicePrefix && (
-                <span className="flex items-center px-2 text-xs font-mono bg-gray-100 border border-gray-300 rounded-lg text-gray-600 whitespace-nowrap">{invoicePrefix}</span>
-              )}
+          <Field label="Rechnungsnummer (Präfix / Jahr / Nr.)">
+            <div className="flex gap-1 items-center">
               <input
-                className="form-input"
-                value={invoicePrefix && form.invoice_number?.startsWith(invoicePrefix)
-                  ? form.invoice_number.slice(invoicePrefix.length)
-                  : form.invoice_number}
-                onChange={e => {
-                  const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
-                  set('invoice_number', val ? `${invoicePrefix}${val.padStart(4, '0')}` : '');
-                }}
+                className="form-input font-mono text-sm"
+                style={{ maxWidth: '70px' }}
+                value={invParts.prefix}
+                onChange={e => setInvPart('prefix', e.target.value)}
+                placeholder="15a"
+              />
+              <span className="text-gray-400">-</span>
+              <input
+                className="form-input font-mono text-sm"
+                style={{ maxWidth: '64px' }}
+                value={invParts.year}
+                onChange={e => setInvPart('year', e.target.value.replace(/[^0-9]/g, '').slice(0, 4))}
+                placeholder="2026"
+                maxLength={4}
+              />
+              <span className="text-gray-400">-</span>
+              <input
+                className="form-input font-mono text-sm"
+                style={{ maxWidth: '70px' }}
+                value={invParts.suffix}
+                onChange={e => setInvPart('suffix', e.target.value.replace(/[^0-9]/g, '').slice(0, 4))}
                 placeholder="0001"
                 maxLength={4}
-                style={{ maxWidth: '80px' }}
               />
               <button
                 type="button"
