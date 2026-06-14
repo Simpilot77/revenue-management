@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../utils/api';
-import { formatCurrency } from '../utils/format';
+import { formatCurrency, formatDateFull } from '../utils/format';
 import { buildInvoicePreviewData, exportWorkSchedule } from '../utils/pdfExport';
 import InvoicePreviewModal from '../components/InvoicePreviewModal';
 import { applyInvoiceNumber } from '../utils/numbering';
@@ -40,11 +40,6 @@ function fmtDate(ds) {
   if (!ds) return '';
   return new Date(ds).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
 }
-function fmtDateFull(ds) {
-  if (!ds) return '';
-  return new Date(ds).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-}
-
 // ─── Task definitions ────────────────────────────────────────────────────────
 
 const TASK_DEFS = [
@@ -212,7 +207,7 @@ function BookingDetailModal({ booking, house, title, onClose }) {
                 <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-white font-black" style={{ backgroundColor: '#22c55e', fontSize: '0.55rem' }}>→</span>
                 Check-in
               </div>
-              <div className="text-sm font-semibold text-gray-800">{fmtDateFull(checkin)}</div>
+              <div className="text-sm font-semibold text-gray-800">{formatDateFull(checkin)}</div>
               {daysIn >= 0 && daysIn < 30 && (
                 <div className="text-xs text-green-600 mt-0.5">{daysIn === 0 ? 'Heute' : `Vor ${daysIn} Tag${daysIn !== 1 ? 'en' : ''}`}</div>
               )}
@@ -222,7 +217,7 @@ function BookingDetailModal({ booking, house, title, onClose }) {
                 <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-white font-black" style={{ backgroundColor: '#ef4444', fontSize: '0.5rem' }}>■</span>
                 Check-out
               </div>
-              <div className="text-sm font-semibold text-gray-800">{fmtDateFull(checkout)}</div>
+              <div className="text-sm font-semibold text-gray-800">{formatDateFull(checkout)}</div>
               {daysOut >= 0 && daysOut < 30 && (
                 <div className={`text-xs mt-0.5 ${daysOut === 0 ? 'text-red-600' : daysOut === 1 ? 'text-amber-600' : 'text-gray-500'}`}>
                   {daysOut === 0 ? 'Heute' : daysOut === 1 ? 'Morgen' : `in ${daysOut} Tagen`}
@@ -280,7 +275,7 @@ function BookingDetailModal({ booking, house, title, onClose }) {
               ['Gesamtpreis',  formatCurrency(booking.total_price)],
               booking.invoice_number && ['Rechnungsnr.', booking.invoice_number],
               booking.channel && ['Kanal', booking.channel],
-              booking.booking_date && ['Buchungsdatum', fmtDateFull(booking.booking_date)],
+              booking.booking_date && ['Buchungsdatum', formatDateFull(booking.booking_date)],
             ].filter(Boolean).map(([label, value]) => (
               <div key={label} className="flex justify-between items-center text-sm">
                 <span className="text-gray-400">{label}</span>
@@ -458,12 +453,12 @@ function HouseStatusCard({ house, bookings }) {
         {/* Dates overlay */}
         {activeBooking ? (
           <div className="absolute bottom-3 right-4 text-xs opacity-80 text-right">
-            <div>📅 {fmtDateFull(activeBooking.checkin_date)}</div>
-            <div>🏁 {fmtDateFull(activeBooking.checkout_date)}</div>
+            <div>📅 {formatDateFull(activeBooking.checkin_date)}</div>
+            <div>🏁 {formatDateFull(activeBooking.checkout_date)}</div>
           </div>
         ) : nextBooking && (
           <div className="absolute bottom-3 right-4 text-xs opacity-80 text-right">
-            <div>📅 Ankunft: {fmtDateFull(nextBooking.checkin_date)}</div>
+            <div>📅 Ankunft: {formatDateFull(nextBooking.checkin_date)}</div>
           </div>
         )}
       </div>
@@ -492,7 +487,7 @@ function HouseStatusCard({ house, bookings }) {
               <span className="text-sm font-semibold text-gray-800 truncate">{currentBooking.guest_name}</span>
             </Row>
             <Row label="Abreise">
-              <span className="text-sm font-medium text-red-700">{fmtDateFull(currentBooking.checkout_date)}</span>
+              <span className="text-sm font-medium text-red-700">{formatDateFull(currentBooking.checkout_date)}</span>
               <span className={`text-xs rounded-full px-2 py-0.5 ml-1 ${daysUntilFree === 0 ? 'bg-amber-100 text-amber-700' : 'bg-red-50 text-red-500'}`}>
                 {daysUntilFree === 0 ? 'Heute' : daysUntilFree === 1 ? 'Morgen' : `in ${daysUntilFree} Tagen`}
               </span>
@@ -520,7 +515,7 @@ function HouseStatusCard({ house, bookings }) {
             )}
             {nextBooking && (
               <Row label="Ankunft">
-                <span className="text-sm font-medium text-blue-700">{fmtDateFull(nextBooking.checkin_date)}</span>
+                <span className="text-sm font-medium text-blue-700">{formatDateFull(nextBooking.checkin_date)}</span>
                 <span className={`text-xs rounded-full px-2 py-0.5 ml-1 ${daysUntilNext === 0 ? 'bg-amber-100 text-amber-700' : 'bg-blue-50 text-blue-500'}`}>
                   {daysUntilNext === 0 ? 'Heute' : daysUntilNext === 1 ? 'Morgen' : `in ${daysUntilNext} Tagen`}
                 </span>
@@ -536,7 +531,7 @@ function HouseStatusCard({ house, bookings }) {
                 <div className="min-w-0">
                   <span className="text-sm font-medium text-gray-800 truncate block">{nextBooking.guest_name}</span>
                   <span className="text-xs text-gray-500">
-                    {fmtDateFull(nextBooking.checkin_date)}
+                    {formatDateFull(nextBooking.checkin_date)}
                     {daysUntilNext === 0 ? ' (Heute)' : daysUntilNext === 1 ? ' (Morgen)' : ` (in ${daysUntilNext} Tagen)`}
                   </span>
                 </div>

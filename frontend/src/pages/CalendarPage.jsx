@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
-import { formatCurrency } from '../utils/format';
+import { formatCurrency, formatDateFull } from '../utils/format';
 import { emitDataChange, onDataChange } from '../utils/syncBus';
 
 function getDaysInMonth(year, month) {
@@ -14,11 +14,6 @@ function fmtDateShort(ds) {
   if (!ds) return '';
   return new Date(ds).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
 }
-function fmtDateFull(ds) {
-  if (!ds) return '';
-  return new Date(ds).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-}
-
 const MONTH_NAMES = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
 const DAY_NAMES_SHORT = ['So','Mo','Di','Mi','Do','Fr','Sa'];
 
@@ -553,7 +548,7 @@ export default function CalendarPage() {
             ) : (
               <>
                 <div className="flex items-center justify-between text-gray-600 mb-1.5">
-                  <span>📅 {fmtDateFull(b.checkin_date)} → {fmtDateFull(b.checkout_date)}</span>
+                  <span>📅 {formatDateFull(b.checkin_date)} → {formatDateFull(b.checkout_date)}</span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-center bg-gray-50 rounded-lg py-1.5 mb-1.5">
                   <div>

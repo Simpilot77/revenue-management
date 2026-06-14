@@ -9,6 +9,11 @@ export const formatDate = (dateStr) => {
   return new Date(dateStr).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 };
 
+export const formatDateFull = (dateStr) => {
+  if (!dateStr) return '';
+  return new Date(dateStr).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+};
+
 export const formatDateInput = (dateStr) => {
   if (!dateStr) return '';
   return dateStr.slice(0, 10);

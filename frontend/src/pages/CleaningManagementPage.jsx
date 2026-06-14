@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import api from '../utils/api';
-import { formatCurrency } from '../utils/format';
+import { formatCurrency, formatDateFull } from '../utils/format';
 import { onDataChange, emitDataChange } from '../utils/syncBus';
 
 // ─── localStorage helpers (mirrors CalendarPage.jsx) ──────────────────────────
@@ -22,15 +22,10 @@ const STATUS_STYLES = {
   done:      'bg-green-100 text-green-700',
 };
 
-function fmtDateFull(ds) {
-  if (!ds) return '';
-  return new Date(ds).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-}
-
 function buildMessage(template, entry) {
   return (template || '')
     .replace(/{haus}/g, entry.houseName || '')
-    .replace(/{datum}/g, fmtDateFull(entry.date))
+    .replace(/{datum}/g, formatDateFull(entry.date))
     .replace(/{uhrzeit}/g, entry.deadlineTime || '–')
     .replace(/{umfang}/g, SCOPE_LABELS[entry.scope] || entry.scope || '–')
     .replace(/{fenster}/g, entry.windows ? ' · Fenster putzen' : '')
@@ -249,7 +244,7 @@ export default function CleaningManagementPage() {
           <tbody className="divide-y divide-gray-100">
             {filtered.map(entry => (
               <tr key={entry.key} className="hover:bg-gray-50">
-                <td className="px-4 py-2 whitespace-nowrap">{fmtDateFull(entry.date)}</td>
+                <td className="px-4 py-2 whitespace-nowrap">{formatDateFull(entry.date)}</td>
                 <td className="px-4 py-2 whitespace-nowrap">{entry.houseName}{entry.guestName ? <span className="text-gray-400"> · {entry.guestName}</span> : ''}</td>
                 <td className="px-4 py-2">
                   <span className={`text-xs font-medium px-2 py-1 rounded-full ${STATUS_STYLES[entry.status]}`}>
@@ -284,7 +279,7 @@ export default function CleaningManagementPage() {
         >
           <div className="card" style={{ minWidth: 340, maxWidth: 440, padding: 24 }} onClick={e => e.stopPropagation()}>
             <h3 className="text-base font-semibold text-gray-900 mb-1">🧹 Reinigung – {editEntry.houseName}</h3>
-            <p className="text-sm text-gray-500 mb-4">{fmtDateFull(editEntry.date)}</p>
+            <p className="text-sm text-gray-500 mb-4">{formatDateFull(editEntry.date)}</p>
             <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-4">
               Status: {STATUS_LABELS[editEntry.status]}{editEntry.guestName ? ` · ${editEntry.guestName}` : ''}
             </p>
