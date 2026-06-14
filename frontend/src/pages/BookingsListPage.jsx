@@ -37,7 +37,7 @@ const FIELD_LABELS = {
 };
 
 // ─── Inline-editable cell ────────────────────────────────────────────────────
-function EditableCell({ booking, col, editingCell, onStartEdit, onChangeEdit, onSaveEdit, onCancelEdit, isDuplicate, isLocked }) {
+function EditableCell({ booking, col, editingCell, onStartEdit, onChangeEdit, onSaveEdit, onCancelEdit, isDuplicate, isLocked, onUnlockField }) {
   const inputRef = useRef(null);
   const isEditing = editingCell?.id === booking.id && editingCell?.field === col.key;
 
@@ -104,12 +104,16 @@ function EditableCell({ booking, col, editingCell, onStartEdit, onChangeEdit, on
     return (
       <td
         className={`px-3 py-2 text-sm ${isEditable ? 'cursor-text hover:bg-blue-50 group relative' : ''} ${isLocked ? 'bg-amber-50/60' : ''}`}
-        title={isLocked ? `🔒 Manuell gesetzt – geschützt vor Import` : isEditable ? 'Klicken zum Bearbeiten' : undefined}
+        title={isLocked ? undefined : isEditable ? 'Klicken zum Bearbeiten' : undefined}
         onClick={handleClick}
       >
         {display}
         {isLocked && (
-          <span className="absolute left-1 top-1 text-[9px] text-amber-500 pointer-events-none leading-none">🔒</span>
+          <span
+            className="absolute left-1 top-1 text-[9px] text-amber-500 leading-none cursor-pointer hover:text-amber-700"
+            title="🔒 Manuell gesetzt – geschützt vor Import. Klicken zum Freigeben."
+            onClick={e => { e.stopPropagation(); onUnlockField?.(booking, col.key); }}
+          >🔒</span>
         )}
         {isEditable && !isLocked && (
           <span className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-40 text-blue-400 text-xs pointer-events-none">✏</span>
@@ -324,6 +328,13 @@ export default function BookingsListPage() {
     const fields = (b._manual_fields || []).map(f => FIELD_LABELS[f] || f).join(', ');
     if (!confirm(`Manuelle Sperrung für „${b.guest_name}" aufheben?\nGesperrte Felder: ${fields}\n\nBeim nächsten Lodgify-Import werden diese Felder wieder überschrieben.`)) return;
     await api.delete(`/bookings/${b.id}/clear-overrides`);
+    load();
+    loadAllBookings();
+  };
+
+  const handleUnlockField = async (b, field) => {
+    if (!confirm(`Feld „${FIELD_LABELS[field] || field}" für „${b.guest_name}" wieder freigeben?\n\nEs wird beim nächsten Lodgify-Import wieder automatisch überschrieben.`)) return;
+    await api.delete(`/bookings/${b.id}/unlock-field`, { params: { field } });
     load();
     loadAllBookings();
   };
@@ -567,6 +578,7 @@ export default function BookingsListPage() {
                       onCancelEdit={cancelEdit}
                       isDuplicate={col.key === 'invoice_number' && duplicateInvoices.has(b.id)}
                       isLocked={b._has_manual_overrides && b._manual_fields?.includes(col.key)}
+                      onUnlockField={handleUnlockField}
                     />
                   ))}
                 </tr>
