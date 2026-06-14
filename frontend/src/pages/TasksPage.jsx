@@ -23,6 +23,7 @@ function cleaningDetailString(booking) {
   if (d.durationMin) parts.push(`${d.durationMin} Min.`);
   if (d.cost) parts.push(formatCurrency(Number(d.cost)));
   if (d.notes) parts.push(d.notes);
+  if (d.cleanerConfirmed) parts.push('✅ Reinigungskraft bestätigt');
   return parts.join(' · ');
 }
 

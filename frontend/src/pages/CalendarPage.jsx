@@ -57,7 +57,7 @@ function loadCleaningDetails() {
 }
 function saveCleaningDetailsToStorage(m) { localStorage.setItem('cleaning_details', JSON.stringify(m)); }
 
-const DEFAULT_CLEANING_DETAILS = { scope: 'reinigung', windows: false, deadlineTime: '', durationMin: '', cost: '', notes: '' };
+const DEFAULT_CLEANING_DETAILS = { scope: 'reinigung', windows: false, deadlineTime: '', durationMin: '', cost: '', notes: '', cleanerConfirmed: false };
 const CLEANING_SCOPE_LABELS = { grund: 'Grundreinigung', reinigung: 'Reinigung', bettwaesche: 'Bettwäsche-Wechsel' };
 
 // ── DAY_COL_W: pixel width of each day column
@@ -638,6 +638,11 @@ export default function CalendarPage() {
                 <input type="checkbox" checked={cleaningForm.windows}
                   onChange={e => setCleaningForm(f => ({ ...f, windows: e.target.checked }))} />
                 🪟 Fenster putzen
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" checked={!!cleaningForm.cleanerConfirmed}
+                  onChange={e => setCleaningForm(f => ({ ...f, cleanerConfirmed: e.target.checked }))} />
+                ✅ Reinigungskraft bestätigt
               </label>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Notizen</label>

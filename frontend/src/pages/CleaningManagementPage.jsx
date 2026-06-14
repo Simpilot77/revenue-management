@@ -13,7 +13,7 @@ function loadSettings() {
   try { return JSON.parse(localStorage.getItem('company_settings') || '{}'); } catch { return {}; }
 }
 
-const DEFAULT_DETAILS = { scope: 'reinigung', windows: false, deadlineTime: '', durationMin: '', cost: '', notes: '' };
+const DEFAULT_DETAILS = { scope: 'reinigung', windows: false, deadlineTime: '', durationMin: '', cost: '', notes: '', cleanerConfirmed: false };
 const SCOPE_LABELS = { grund: 'Grundreinigung', reinigung: 'Reinigung', bettwaesche: 'Bettwäsche-Wechsel' };
 const STATUS_LABELS = { planned: 'Geplant', organized: 'Organisiert', done: 'Erledigt' };
 const STATUS_STYLES = {
@@ -232,6 +232,7 @@ export default function CleaningManagementPage() {
               <th className="text-left px-4 py-2">Datum</th>
               <th className="text-left px-4 py-2">Haus</th>
               <th className="text-left px-4 py-2">Status</th>
+              <th className="text-left px-4 py-2">Bestätigt</th>
               <th className="text-left px-4 py-2">Umfang</th>
               <th className="text-left px-4 py-2">Fenster</th>
               <th className="text-left px-4 py-2">Uhrzeit</th>
@@ -251,6 +252,7 @@ export default function CleaningManagementPage() {
                     {STATUS_LABELS[entry.status]}
                   </span>
                 </td>
+                <td className="px-4 py-2">{entry.cleanerConfirmed ? '✅' : '–'}</td>
                 <td className="px-4 py-2 whitespace-nowrap">{SCOPE_LABELS[entry.scope] || '–'}</td>
                 <td className="px-4 py-2">{entry.windows ? '🪟' : '–'}</td>
                 <td className="px-4 py-2">{entry.deadlineTime || '–'}</td>
@@ -265,7 +267,7 @@ export default function CleaningManagementPage() {
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400">Keine Reinigungen im gewählten Zeitraum.</td></tr>
+              <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400">Keine Reinigungen im gewählten Zeitraum.</td></tr>
             )}
           </tbody>
         </table>
@@ -321,6 +323,11 @@ export default function CleaningManagementPage() {
                 <input type="checkbox" checked={form.windows}
                   onChange={e => setForm(f => ({ ...f, windows: e.target.checked }))} />
                 🪟 Fenster putzen
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" checked={!!form.cleanerConfirmed}
+                  onChange={e => setForm(f => ({ ...f, cleanerConfirmed: e.target.checked }))} />
+                ✅ Reinigungskraft bestätigt
               </label>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Notizen</label>
