@@ -3,7 +3,7 @@ import html2canvas from 'html2canvas';
 import { useNavigate } from 'react-router-dom';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, LineChart, Line, CartesianGrid
+  PieChart, Pie, Cell, Legend, LineChart, Line, CartesianGrid, ComposedChart
 } from 'recharts';
 import api from '../utils/api';
 import { findInvoiceNumberGaps, houseLabelForKey, isManualInvoiceNumber } from '../utils/numbering';
@@ -93,6 +93,7 @@ export default function ReportsPage() {
   const [sortDir, setSortDir] = useState('desc');
   const [drillDown, setDrillDown] = useState(null);
   const [guestDist, setGuestDist] = useState([]);
+  const [cashflow, setCashflow] = useState([]);
 
   const from = `${year}-01-01`;
   const to = `${year}-12-31`;
@@ -106,6 +107,7 @@ export default function ReportsPage() {
   useEffect(() => {
     if (tab !== 0) return;
     api.get('/reports/guest-distribution', { params }).then(r => setGuestDist(r.data || []));
+    api.get('/reports/cashflow', { params }).then(r => setCashflow(r.data || []));
   }, [tab, year, houseFilter]);
 
   useEffect(() => {
@@ -172,6 +174,7 @@ export default function ReportsPage() {
   const monthlyData = (tabData || []).map(r => ({
     ...r,
     monthLabel: MONTH_NAMES[parseInt(r.month?.slice(5, 7) || r.month || 1) - 1] || r.month,
+    cashflow: cashflow.find(c => c.month === r.month)?.cashflow ?? 0,
   }));
 
   return (
@@ -226,15 +229,17 @@ export default function ReportsPage() {
             <div className="space-y-6">
               <div className="grid lg:grid-cols-2 gap-6">
                 <div className="card">
-                  <SectionHeader title="Umsatz pro Monat (Klick für Buchungsdetails)" />
+                  <SectionHeader title="Umsatz & Cash Flow pro Monat (Klick für Buchungsdetails)" />
                   <ResponsiveContainer width="100%" height={250}>
-                    <BarChart data={monthlyData}>
+                    <ComposedChart data={monthlyData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                       <XAxis dataKey="monthLabel" tick={{ fontSize: 11 }} />
                       <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
                       <Tooltip formatter={v => formatCurrency(v)} />
+                      <Legend />
                       <Bar dataKey="revenue" fill="#1d4ed8" radius={[4,4,0,0]} name="Umsatz" cursor="pointer" onClick={(d) => d.booking_ids?.length && setDrillDown({ title: `Buchungen ${d.monthLabel} ${year}`, ids: d.booking_ids })} />
-                    </BarChart>
+                      <Line type="monotone" dataKey="cashflow" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} name="Cash Flow" />
+                    </ComposedChart>
                   </ResponsiveContainer>
                 </div>
                 <div className="card">
@@ -268,7 +273,7 @@ export default function ReportsPage() {
                           Frei {h.short}
                         </th>
                       ))}
-                      {['Umsatz','ADR','RevPAR'].map(h => (
+                      {['Umsatz','Cash Flow','ADR','RevPAR'].map(h => (
                         <th key={h} className="text-left text-gray-500 font-medium px-4 py-3">{h}</th>
                       ))}
                     </tr>
@@ -294,6 +299,7 @@ export default function ReportsPage() {
                           : <td className="px-4 py-2 text-gray-400">—</td>
                         }
                         <td className="px-4 py-2 font-medium">{formatCurrency(r.revenue)}</td>
+                        <td className="px-4 py-2 font-medium text-amber-700">{formatCurrency(r.cashflow)}</td>
                         <td className="px-4 py-2">{formatCurrency(r.adr)}</td>
                         <td className="px-4 py-2">{formatCurrency(r.revpar)}</td>
                       </tr>

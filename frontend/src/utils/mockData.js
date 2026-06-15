@@ -891,31 +891,41 @@ export function calcGuestDistribution(from, to, houseId) {
   return Object.values(dist).sort((a, b) => a.guest_count - b.guest_count);
 }
 
-// Cashflow: Umsatz gruppiert nach Buchungsdatum (wann die Zahlung einging)
+// Cashflow: tatsächliche Zahlungseingänge gruppiert nach Rechnungsdatum.
+// Berücksichtigt aufgeteilte Rechnungen (Teilrechnungen) und Stornos: jede
+// Rechnung in `booking.invoices[]` fließt mit ihrem eigenen Rechnungsdatum
+// und Betrag (Storno-Beträge sind negativ) in den Monat ihres Datums ein.
+// Buchungen ohne `invoices[]` (Legacy) zählen mit ihrem Gesamtbetrag im
+// Check-in-Monat, da kein Rechnungsdatum bekannt ist.
 export function calcCashflow(from, to, houseId) {
   const hid = houseId ? parseInt(houseId) : null;
+  const fromMonth = from ? from.slice(0, 7) : null;
+  const toMonth = to ? to.slice(0, 7) : null;
   const byMonth = {};
   const ensureMonth = (m) => {
-    if (!byMonth[m]) byMonth[m] = { month: m, revenue: 0, bookings: 0, revenue_per_house: {} };
+    if (!byMonth[m]) byMonth[m] = { month: m, cashflow: 0, payments: 0 };
   };
   BOOKINGS.filter(b => {
     if (!active(b)) return false;
     if (hid && b.house_id !== hid) return false;
-    const bd = b.booking_date?.slice(0, 10);
-    if (!bd) return false;
-    if (from && bd < from) return false;
-    if (to   && bd > to)   return false;
     return true;
   }).forEach(b => {
-    const m = b.booking_date.slice(0, 7);
-    ensureMonth(m);
-    byMonth[m].revenue += parseFloat(b.total_price) || 0;
-    byMonth[m].bookings++;
-    byMonth[m].revenue_per_house[b.house_id] = (byMonth[m].revenue_per_house[b.house_id] || 0) + (parseFloat(b.total_price) || 0);
+    const entries = (b.invoices && b.invoices.length)
+      ? b.invoices
+      : (b.invoice_number ? [{ invoice_date: null, brutto_total: b.total_price }] : []);
+    entries.forEach(inv => {
+      const m = (inv.invoice_date || b.checkin_date || b.booking_date || '').slice(0, 7);
+      if (!m) return;
+      if (fromMonth && m < fromMonth) return;
+      if (toMonth   && m > toMonth)   return;
+      ensureMonth(m);
+      byMonth[m].cashflow += parseFloat(inv.brutto_total) || 0;
+      byMonth[m].payments++;
+    });
   });
   return Object.values(byMonth).sort((a, b) => a.month.localeCompare(b.month)).map(r => ({
     ...r,
-    revenue: parseFloat(r.revenue.toFixed(2)),
+    cashflow: parseFloat(r.cashflow.toFixed(2)),
   }));
 }
 
