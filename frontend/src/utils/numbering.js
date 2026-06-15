@@ -3,7 +3,7 @@
 // value is already assigned elsewhere, ask for confirmation, clear it from the old
 // owner, set it on the target, and notify other pages via syncBus.
 import api, { getCustomers } from './api';
-import { BOOKINGS } from './mockData';
+import { BOOKINGS, HOUSES } from './mockData';
 import { emitDataChange } from './syncBus';
 import { buildInvoicePreviewData } from './pdfExport';
 
@@ -138,6 +138,13 @@ export function findInvoiceNumberGaps(invoiceNumbers) {
     if (missing.length) gaps[key] = missing;
   });
   return gaps;
+}
+
+// Maps a gap-group key like "15a-2026" to its house label, e.g. "Haus 1 (A)".
+export function houseLabelForKey(key) {
+  const prefix = String(key).split('-')[0];
+  const house = HOUSES.find(h => h.house_number === prefix);
+  return house ? `${house.name} (${house.short_name})` : prefix;
 }
 
 // Determines whether an invoice number was entered manually rather than

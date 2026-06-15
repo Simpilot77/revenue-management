@@ -6,7 +6,7 @@ import {
   PieChart, Pie, Cell, Legend, LineChart, Line, CartesianGrid
 } from 'recharts';
 import api from '../utils/api';
-import { findInvoiceNumberGaps, isManualInvoiceNumber } from '../utils/numbering';
+import { findInvoiceNumberGaps, houseLabelForKey, isManualInvoiceNumber } from '../utils/numbering';
 import { formatCurrency, formatPercent, formatDate, MONTH_NAMES, STATUS_LABELS, STATUS_COLORS, PAYMENT_STATUS_LABELS, PAYMENT_STATUS_COLORS } from '../utils/format';
 
 function DrillDownModal({ title, bookingIds, onClose }) {
@@ -551,7 +551,8 @@ export default function ReportsPage() {
 
             // Gap detection: per house+year, find missing sequence numbers (starting at 1000)
             const gapWarnings = Object.entries(findInvoiceNumberGaps(rows.map(r => r.invoice_number)))
-              .map(([key, missing]) => `${key}: fehlende Nummern ${missing.map(n => String(n).padStart(4,'0')).join(', ')}`);
+              .map(([key, missing]) => ({ key, label: houseLabelForKey(key), missing }))
+              .sort((a, b) => a.key.localeCompare(b.key));
 
             // Rows missing invoice number
             const missingInvoice = new Set(rows.filter(r => !r.invoice_number).map(r => r.id));
@@ -573,9 +574,14 @@ export default function ReportsPage() {
                   </div>
                 </div>
                 {gapWarnings.length > 0 && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800 space-y-1">
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800 space-y-1.5">
                     <div className="font-semibold">⚠️ Lücken in den Rechnungsnummern</div>
-                    {gapWarnings.map((w, i) => <div key={i} className="text-xs">{w}</div>)}
+                    {gapWarnings.map(g => (
+                      <div key={g.key} className="flex flex-wrap items-baseline gap-x-2 text-xs">
+                        <span className="font-semibold whitespace-nowrap">{g.label}:</span>
+                        <span>fehlende Nummern {g.missing.map(n => String(n).padStart(4, '0')).join(', ')}</span>
+                      </div>
+                    ))}
                   </div>
                 )}
                 {bookingsLoading ? (

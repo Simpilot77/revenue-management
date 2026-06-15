@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { formatCurrency, formatDate, STATUS_LABELS, STATUS_COLORS } from '../utils/format';
 import { onDataChange, emitDataChange } from '../utils/syncBus';
-import { findInvoiceNumberGaps, isManualInvoiceNumber, suggestNextInvoiceNumber } from '../utils/numbering';
+import { findInvoiceNumberGaps, houseLabelForKey, isManualInvoiceNumber, suggestNextInvoiceNumber } from '../utils/numbering';
 import { buildStornoPreviewData, buildPartialInvoicePreviewData, buildInvoicePreviewData } from '../utils/pdfExport';
 import InvoicePreviewModal from '../components/InvoicePreviewModal';
 
@@ -146,9 +146,16 @@ export default function InvoiceManagementPage() {
       {(gaps.length > 0 || duplicates.size > 0) && (
         <div className="space-y-2">
           {gaps.length > 0 && (
-            <div className="card p-3 bg-amber-50 border border-amber-200 text-sm text-amber-800">
-              <span className="font-semibold">{gaps.reduce((s, g) => s + g.missing.length, 0)} Lücke{gaps.reduce((s, g) => s + g.missing.length, 0) !== 1 ? 'n' : ''} gefunden:</span>{' '}
-              {gaps.map(g => `${g.key}: fehlende Nr. ${g.missing.map(n => String(n).padStart(4, '0')).join(', ')}`).join(' · ')}
+            <div className="card p-3 bg-amber-50 border border-amber-200 text-sm text-amber-800 space-y-1.5">
+              <div className="font-semibold">
+                {gaps.reduce((s, g) => s + g.missing.length, 0)} Lücke{gaps.reduce((s, g) => s + g.missing.length, 0) !== 1 ? 'n' : ''} gefunden
+              </div>
+              {[...gaps].sort((a, b) => a.key.localeCompare(b.key)).map(g => (
+                <div key={g.key} className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="font-semibold whitespace-nowrap">{houseLabelForKey(g.key)}:</span>
+                  <span>fehlende Nr. {g.missing.map(n => String(n).padStart(4, '0')).join(', ')}</span>
+                </div>
+              ))}
             </div>
           )}
           {duplicates.size > 0 && (
