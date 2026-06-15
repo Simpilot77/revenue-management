@@ -474,6 +474,46 @@ export function buildInvoicePreviewData(booking, lang = 'de') {
   };
 }
 
+// ─── Build a Stornorechnung (cancellation invoice) from an existing invoice ──
+// Clones the original invoice's data, negates all amounts, and points back at
+// the original invoice via `_reference_invoice_*` / `reference_line`.
+export function buildStornoPreviewData(originalEntry, newInvoiceNumber, lang) {
+  const data = JSON.parse(JSON.stringify(originalEntry.data));
+  const t = INVOICE_I18N[lang || data.lang || 'de'] || INVOICE_I18N.de;
+
+  const vatRate = parseFloat(data.vat_rate || 7);
+  const bruttoTotal = -parseFloat(data.brutto_total || 0);
+  const nettoTotal = bruttoTotal / (1 + vatRate / 100);
+  const vatAmount = bruttoTotal - nettoTotal;
+
+  const invoiceDate = new Date();
+  const invoiceDateStr = invoiceDate.toLocaleDateString(t.locale, { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  data.lang = lang || data.lang || 'de';
+  data.brutto_total = bruttoTotal;
+  data.netto_total = nettoTotal;
+  data.vat_amount = vatAmount;
+  data.accommodation_unit_price = -parseFloat(data.accommodation_unit_price || 0);
+  data.cleaning_fee = -parseFloat(data.cleaning_fee || 0);
+  data.extra_items = (data.extra_items || []).map(item => ({ ...item, unit_price: -parseFloat(item.unit_price || 0) }));
+
+  data.invoice_number = newInvoiceNumber;
+  data.invoice_date = invoiceDateStr;
+
+  data._type = 'storno';
+  data._reference_invoice_id = originalEntry.id;
+  data._reference_invoice_number = originalEntry.invoice_number;
+  data._title = lang === 'en' ? 'Cancellation Invoice' : 'Stornorechnung';
+  data.reference_line = lang === 'en'
+    ? `This cancellation invoice refers to invoice no. ${originalEntry.invoice_number} dated ${originalEntry.invoice_date}.`
+    : `Diese Stornorechnung bezieht sich auf Rechnung Nr. ${originalEntry.invoice_number} vom ${originalEntry.invoice_date}.`;
+
+  const safeName = (data.guest_name || 'booking').replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+  data._filename = t.filename(newInvoiceNumber, safeName);
+
+  return data;
+}
+
 // ─── Generate PDF from preview data ─────────────────────────────────────────
 
 export async function exportInvoiceFromData(data) {
@@ -566,8 +606,16 @@ export async function exportInvoiceFromData(data) {
   doc.text(data.salutation, 25, titleY + 13);
   const intro1Lines = doc.splitTextToSize(data.intro_line1, W - 25 - 14);
   doc.text(intro1Lines, 25, titleY + 21);
-  doc.text(data.intro_line2, 25, titleY + 21 + intro1Lines.length * 5.5);
-  const tableStartY = titleY + 21 + intro1Lines.length * 5.5 + 9;
+  let introY = titleY + 21 + intro1Lines.length * 5.5;
+  if (data.reference_line) {
+    doc.setFont('helvetica', 'bold');
+    const refLines = doc.splitTextToSize(data.reference_line, W - 25 - 14);
+    doc.text(refLines, 25, introY);
+    introY += refLines.length * 5.5;
+    doc.setFont('helvetica', 'normal');
+  }
+  doc.text(data.intro_line2, 25, introY);
+  const tableStartY = introY + 9;
 
   // ── Table rows ──
   const vatRate = parseFloat(data.vat_rate || 7);

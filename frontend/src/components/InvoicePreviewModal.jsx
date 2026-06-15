@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { exportInvoiceFromData } from '../utils/pdfExport';
-import { suggestNextInvoiceNumber, suggestNextCustomerNumber, applyBookingNumberField, splitInvoiceNumber, composeInvoiceNumber } from '../utils/numbering';
+import { suggestNextInvoiceNumber, suggestNextCustomerNumber, applyBookingNumberField, splitInvoiceNumber, composeInvoiceNumber, recordInvoice, checkInvoiceNumberDuplicate } from '../utils/numbering';
 
 // ─── Load presets from company_settings ──────────────────────────────────────
 function loadPresets() {
@@ -80,6 +80,10 @@ export default function InvoicePreviewModal({ data, onClose, onLangChange, onCha
   };
   const commitInvoiceNumber = async (value) => {
     if (!data._booking_id) return;
+    if (!checkInvoiceNumberDuplicate(value, data._booking_id, null)) return;
+    // Storno invoices get their own number but must not overwrite the
+    // booking's primary invoice_number (which tracks the next normal invoice).
+    if (data._type === 'storno') return;
     await applyBookingNumberField(data._booking_id, 'invoice_number', value, 'Rechnungsnummer');
   };
   const handleAutoCustomerNumber = async () => {
@@ -113,7 +117,22 @@ export default function InvoicePreviewModal({ data, onClose, onLangChange, onCha
 
   const handleGenerate = async () => {
     setGenerating(true);
-    try { await exportInvoiceFromData(data); }
+    try {
+      await exportInvoiceFromData(data);
+      if (data._booking_id) {
+        await recordInvoice(data._booking_id, {
+          id: Date.now(),
+          invoice_number: data.invoice_number,
+          type: data._type || 'normal',
+          reference_invoice_id: data._reference_invoice_id || null,
+          reference_invoice_number: data._reference_invoice_number || null,
+          invoice_date: data.invoice_date,
+          brutto_total: data.brutto_total,
+          lang: data.lang,
+          data,
+        });
+      }
+    }
     finally { setGenerating(false); onClose(); }
   };
 
@@ -144,7 +163,9 @@ export default function InvoicePreviewModal({ data, onClose, onLangChange, onCha
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50 rounded-t-xl">
-          <h2 className="text-base font-semibold text-gray-900">🧾 Rechnung erstellen</h2>
+          <h2 className="text-base font-semibold text-gray-900">
+            {data._type === 'storno' ? '🧾 Stornorechnung erstellen' : '🧾 Rechnung erstellen'}
+          </h2>
           <div className="flex items-center gap-3">
             <div className="flex rounded-lg overflow-hidden border border-gray-300 text-sm">
               {['de','en'].map(lang => (
@@ -158,6 +179,13 @@ export default function InvoicePreviewModal({ data, onClose, onLangChange, onCha
             <button type="button" className="text-gray-400 hover:text-gray-600 text-xl" onClick={onClose}>✕</button>
           </div>
         </div>
+
+        {/* Storno-Banner */}
+        {data._type === 'storno' && (
+          <div className="px-6 py-3 bg-red-50 border-b border-red-200 text-sm text-red-700 font-medium">
+            🔴 Stornorechnung — bezieht sich auf Rechnung Nr. {data._reference_invoice_number}
+          </div>
+        )}
 
         {/* Scrollable content */}
         <div className="p-6 space-y-6" style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 180px)' }}>

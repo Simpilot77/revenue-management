@@ -66,6 +66,48 @@ export async function applyInvoiceNumber(bookingId, value) {
   return applyBookingNumberField(bookingId, 'invoice_number', value, 'Rechnungsnummer');
 }
 
+// Flattens BOOKINGS into a list of all assigned invoice numbers (both the
+// primary `invoice_number` field and every entry in `invoices[]`), optionally
+// excluding one specific entry (e.g. the one currently being edited).
+export function getAllInvoiceNumbers(excludeBookingId, excludeInvoiceId) {
+  const result = [];
+  for (const b of BOOKINGS) {
+    if (b.invoice_number && !(b.id === excludeBookingId && excludeInvoiceId == null)) {
+      result.push({ bookingId: b.id, invoiceId: null, invoice_number: b.invoice_number, guest_name: b.guest_name, type: 'normal' });
+    }
+    for (const inv of b.invoices || []) {
+      if (b.id === excludeBookingId && inv.id === excludeInvoiceId) continue;
+      result.push({ bookingId: b.id, invoiceId: inv.id, invoice_number: inv.invoice_number, guest_name: b.guest_name, type: inv.type });
+    }
+  }
+  return result;
+}
+
+// Persists a generated invoice snapshot into `booking.invoices`. For normal
+// invoices, also keeps `booking.invoice_number` in sync (as before).
+export async function recordInvoice(bookingId, invoiceEntry) {
+  const target = BOOKINGS.find(b => b.id === bookingId) || {};
+  const invoices = [...(target.invoices || []), invoiceEntry];
+  const updates = { ...target, invoices };
+  if (invoiceEntry.type === 'normal') updates.invoice_number = invoiceEntry.invoice_number;
+  await api.put(`/bookings/${bookingId}`, updates);
+  emitDataChange({ type: 'invoice' });
+}
+
+// Informative duplicate check across all invoice numbers (primary field + invoices[]).
+// Unlike applyBookingNumberField, this does not reassign anything — it just warns.
+// Returns true if the value can be used (no conflict, or user confirmed anyway).
+export function checkInvoiceNumberDuplicate(value, excludeBookingId, excludeInvoiceId) {
+  if (!value) return true;
+  const conflict = getAllInvoiceNumbers(excludeBookingId, excludeInvoiceId)
+    .find(entry => entry.invoice_number === value);
+  if (!conflict) return true;
+  return window.confirm(
+    `Rechnungsnummer "${value}" ist bereits für ${conflict.guest_name || 'eine andere Buchung'} vergeben.\n\n` +
+    `Trotzdem verwenden?`
+  );
+}
+
 // Sets customer_number on customer `customerId`, same "last edit wins" mechanism.
 export async function applyCustomerNumber(customerId, value) {
   const customers = getCustomers();

@@ -331,8 +331,10 @@ api.interceptors.request.use((config) => {
     const houseNum = house?.house_number || '15a';
     const prefix = `${houseNum}-${year}-`;
     const existing = BOOKINGS
-      .filter(b => b.house_id === parseInt(params.house_id) && b.invoice_number?.startsWith(prefix))
-      .map(b => parseInt(b.invoice_number.split('-').pop() || 0));
+      .filter(b => b.house_id === parseInt(params.house_id))
+      .flatMap(b => [b.invoice_number, ...(b.invoices || []).map(i => i.invoice_number)])
+      .filter(num => num?.startsWith(prefix))
+      .map(num => parseInt(num.split('-').pop() || 0));
     const next = existing.length ? Math.max(...existing) + 1 : 1;
     data = { invoice_number: `${prefix}${String(next).padStart(4, '0')}` };
   }

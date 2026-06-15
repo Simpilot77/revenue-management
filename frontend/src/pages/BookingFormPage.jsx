@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../utils/api';
 import { nightsBetween, formatCurrency, formatDate, STATUS_LABELS } from '../utils/format';
-import { buildInvoicePreviewData } from '../utils/pdfExport';
-import { splitInvoiceNumber, composeInvoiceNumber } from '../utils/numbering';
+import { buildInvoicePreviewData, buildStornoPreviewData, exportInvoiceFromData } from '../utils/pdfExport';
+import { splitInvoiceNumber, composeInvoiceNumber, suggestNextInvoiceNumber } from '../utils/numbering';
 import InvoicePreviewModal from '../components/InvoicePreviewModal';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -92,6 +92,7 @@ export default function BookingFormPage() {
   const [guestChangeModal, setGuestChangeModal] = useState(null); // { payload, otherBookings, guestFields }
   const [depositModal, setDepositModal] = useState(null); // { amount } while editing deposit amount
   const [statusWarning, setStatusWarning] = useState(null); // Warntext bei Status-Logikcheck
+  const [stornoLoading, setStornoLoading] = useState(false);
   const cleaningDateTouched = useRef(false);
 
   // ── localStorage helpers for task sync ──
@@ -802,6 +803,60 @@ export default function BookingFormPage() {
           </Field>
         </Section>
 
+        {/* Invoices list */}
+        {isEdit && savedBooking?.invoices?.length > 0 && (
+          <div className="card">
+            <h3 className="font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-100">🧾 Rechnungen</h3>
+            <div className="space-y-2">
+              {savedBooking.invoices.map(inv => {
+                const isStornoed = savedBooking.invoices.some(
+                  other => other.type === 'storno' && other.reference_invoice_id === inv.id
+                );
+                return (
+                  <div key={inv.id} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-gray-50">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="font-mono text-sm text-gray-700">{inv.invoice_number}</span>
+                      <span className="text-xs text-gray-400">{inv.invoice_date}</span>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${inv.type === 'storno' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                        {inv.type === 'storno' ? 'Storno' : 'Normal'}
+                      </span>
+                      {inv.type === 'storno' && inv.reference_invoice_number && (
+                        <span className="text-xs text-gray-400 truncate">↩ Storno zu {inv.reference_invoice_number}</span>
+                      )}
+                      <span className="text-sm text-gray-600">{formatCurrency(inv.brutto_total)}</span>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        type="button"
+                        className="btn-secondary text-xs px-2 py-1"
+                        onClick={() => exportInvoiceFromData(inv.data)}
+                      >
+                        📄 PDF erneut
+                      </button>
+                      {inv.type === 'normal' && !isStornoed && (
+                        <button
+                          type="button"
+                          className="btn-secondary text-xs px-2 py-1 text-red-600"
+                          disabled={stornoLoading}
+                          onClick={async () => {
+                            setStornoLoading(true);
+                            try {
+                              const nextNumber = await suggestNextInvoiceNumber(savedBooking.house_id);
+                              setInvoicePreview(buildStornoPreviewData(inv, nextNumber, inv.lang || 'de'));
+                            } finally { setStornoLoading(false); }
+                          }}
+                        >
+                          {stornoLoading ? '…' : '🔴 Stornieren'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Status checkboxes */}
         <Section title="✅ Checkliste">
           <Field label=" ">
@@ -1014,7 +1069,7 @@ export default function BookingFormPage() {
                 }}
                 className="btn-secondary flex items-center gap-2"
               >
-                🧾 Rechnung erstellen…
+                🧾 Neue Rechnung erstellen…
               </button>
             )}
           </div>
@@ -1031,7 +1086,10 @@ export default function BookingFormPage() {
     {invoicePreview && (
       <InvoicePreviewModal
         data={invoicePreview}
-        onClose={() => setInvoicePreview(null)}
+        onClose={() => {
+          setInvoicePreview(null);
+          if (savedBooking) api.get(`/bookings/${savedBooking.id}`).then(r => setSavedBooking(r.data));
+        }}
         onLangChange={(lang) => {
           const booking = {
             ...savedBooking, ...form,
