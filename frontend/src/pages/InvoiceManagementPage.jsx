@@ -172,7 +172,8 @@ export default function InvoiceManagementPage() {
       )}
 
       {/* ── Table ── */}
-      <div className="card overflow-hidden">
+      <div className="card overflow-hidden p-0">
+        <div className="overflow-x-auto table-scroll">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
             <tr>
@@ -238,6 +239,7 @@ export default function InvoiceManagementPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {invoicePreview && (

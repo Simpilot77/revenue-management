@@ -37,6 +37,20 @@
   .badge {
     @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
   }
+
+  /* Horizontally scrollable tables: fade + shadow hints appear only while
+     there is more content to scroll to on that side. */
+  .table-scroll {
+    background:
+      linear-gradient(to right, white 30px, rgba(255,255,255,0) 30px),
+      linear-gradient(to left, white 30px, rgba(255,255,255,0) 30px),
+      radial-gradient(farthest-side at 0 50%, rgba(0,0,0,.12), rgba(0,0,0,0)),
+      radial-gradient(farthest-side at 100% 50%, rgba(0,0,0,.12), rgba(0,0,0,0));
+    background-repeat: no-repeat;
+    background-size: 30px 100%, 30px 100%, 12px 100%, 12px 100%;
+    background-position: 0 0, 100% 0, 0 0, 100% 0;
+    background-attachment: local, local, scroll, scroll;
+  }
 }
 
 @media print {

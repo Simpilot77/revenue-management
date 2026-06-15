@@ -316,7 +316,7 @@ export default function ReportsPage() {
               {guestDist.length > 0 && (
                 <div className="card">
                   <SectionHeader title="Buchungen nach Personenanzahl" />
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto table-scroll">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 border-b">
                         <tr>{['Personen','Buchungen','Anteil','Gebuchte Nächte','Umsatz Ø'].map(h => (
@@ -598,7 +598,7 @@ export default function ReportsPage() {
                   <div className="text-center text-gray-400 py-12">Daten werden geladen…</div>
                 ) : (
                   <div className="card p-0 overflow-hidden">
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto table-scroll">
                       <table className="w-full text-sm">
                         <thead className="bg-gray-50 border-b">
                           <tr>

@@ -601,7 +601,7 @@ export default function DashboardPage() {
           {/* House Comparison */}
           <div className="card">
             <h2 className="font-semibold text-gray-800 mb-4">Häuservergleich ({from} – {to})</h2>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto table-scroll">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100">
