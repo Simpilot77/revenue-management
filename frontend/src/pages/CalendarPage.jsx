@@ -57,6 +57,11 @@ function loadCleaningDetails() {
 }
 function saveCleaningDetailsToStorage(m) { localStorage.setItem('cleaning_details', JSON.stringify(m)); }
 
+function loadExtraTasks() {
+  try { return JSON.parse(localStorage.getItem('calendar_extra_tasks') || '{}'); } catch { return {}; }
+}
+function saveExtraTasksToStorage(m) { localStorage.setItem('calendar_extra_tasks', JSON.stringify(m)); }
+
 const DEFAULT_CLEANING_DETAILS = { scope: 'reinigung', windows: false, deadlineTime: '', durationMin: '', cost: '', notes: '', cleanerConfirmed: false };
 const CLEANING_SCOPE_LABELS = { grund: 'Grundreinigung', reinigung: 'Zwischenreinigung', bettwaesche: 'Bettwäsche-Wechsel' };
 
@@ -78,6 +83,7 @@ export default function CalendarPage() {
   const [cleaningExclusions, setCleaningExclusions] = useState(loadCleaningExclusions);
   const [cleaningDetailsMap, setCleaningDetailsMap] = useState(loadCleaningDetails);
   const [cleaningForm, setCleaningForm] = useState(DEFAULT_CLEANING_DETAILS);
+  const [extraTasks, setExtraTasks] = useState(loadExtraTasks);
   const [tasksVersion, setTasksVersion] = useState(0);
   const [tooltip, setTooltip] = useState(null); // { booking, x, y }
   const [readinessPopup, setReadinessPopup] = useState(null); // { booking, items, rect }
@@ -223,6 +229,17 @@ export default function CalendarPage() {
     const key = `${args.houseId}_${args.date}`;
     setCleaningForm({ ...DEFAULT_CLEANING_DETAILS, ...(cleaningDetailsMap[key] || {}) });
     setCleaningModal(args);
+  };
+
+  const editExtraTask = (ds) => {
+    const current = extraTasks[ds] || '';
+    const input = window.prompt(`Zusatzaufgabe für ${fmtDateShort(ds)} (z. B. Müllabfuhr):`, current);
+    if (input === null) return;
+    const text = input.trim();
+    const updated = { ...extraTasks };
+    if (text) updated[ds] = text; else delete updated[ds];
+    setExtraTasks(updated);
+    saveExtraTasksToStorage(updated);
   };
 
   const VISIBLE = ['bestaetigt','eingecheckt','ausgecheckt','angefragt','gesperrt'];
@@ -516,6 +533,53 @@ export default function CalendarPage() {
                   </div>
                 );
               })}
+
+              {/* ── Zusatzaufgaben row ── */}
+              <div className="flex border-t-2 border-gray-200 bg-amber-50/40 relative" style={{ height: ROW_H }}>
+                {/* Sticky label */}
+                <div
+                  className="shrink-0 flex flex-col justify-center px-4 border-r border-gray-200 sticky left-0 z-10 bg-amber-50/80"
+                  style={{ width: HOUSE_COL_W, minWidth: HOUSE_COL_W }}
+                >
+                  <span className="text-sm font-semibold text-gray-800 leading-tight">🗑️ Zusatzaufgaben</span>
+                  <span className="text-xs text-gray-400 mt-0.5">z. B. Müllabfuhr</span>
+                </div>
+
+                {/* Day cells */}
+                <div className="relative flex flex-1" style={{ height: ROW_H }}>
+                  {days.map(d => {
+                    const ds = dateStr(year, month, d);
+                    const dow = new Date(year, month, d).getDay();
+                    const isWe = dow === 0 || dow === 6;
+                    const today = isToday(d);
+                    const task = extraTasks[ds];
+                    return (
+                      <div
+                        key={d}
+                        style={{
+                          width: DAY_COL_W, minWidth: DAY_COL_W, position: 'relative', flexShrink: 0,
+                          ...(today ? { backgroundColor: 'rgba(168,85,247,0.16)', boxShadow: 'inset 0 0 0 1px rgba(168,85,247,0.5)' } : {}),
+                        }}
+                        className={`border-r border-gray-100 cursor-pointer flex items-center justify-center
+                          ${today ? '' : isWe ? 'bg-gray-100/30' : ''}`}
+                        title={task ? `${task} – klicken zum Bearbeiten/Entfernen` : 'Klicken = Zusatzaufgabe eintragen'}
+                        onClick={() => editExtraTask(ds)}
+                      >
+                        {today && <div className="absolute top-0 bottom-0 left-0 w-1 bg-violet-500" />}
+                        {task && (
+                          <span
+                            style={{ fontSize: '0.85rem' }}
+                            role="img"
+                            aria-label={task}
+                          >
+                            🗑️
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -553,6 +617,10 @@ export default function CalendarPage() {
             Check-out
           </span>
           <span className="text-gray-400 ml-2">· Leere Zelle klicken = Reinigung markieren</span>
+          <span className="flex items-center gap-1.5">
+            🗑️ Zusatzaufgabe (z. B. Müllabfuhr)
+          </span>
+          <span className="text-gray-400 ml-2">· Zelle in Zeile „Zusatzaufgaben" klicken = Aufgabe eintragen/entfernen</span>
         </div>
 
         {/* ── Mini overview section ── */}
