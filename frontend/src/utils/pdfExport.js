@@ -514,6 +514,40 @@ export function buildStornoPreviewData(originalEntry, newInvoiceNumber, lang) {
   return data;
 }
 
+// ─── Build a Teilrechnung (partial invoice) from a booking ──────────────────
+// Scales all amounts by `fraction` (e.g. 0.5 for 50%) instead of negating
+// them, and adds a `reference_line` pointing back at the total amount.
+export function buildPartialInvoicePreviewData(booking, fraction, lang) {
+  const data = buildInvoicePreviewData(booking, lang);
+  const t = INVOICE_I18N[lang] || INVOICE_I18N.de;
+
+  data.accommodation_unit_price = (parseFloat(data.accommodation_unit_price) || 0) * fraction;
+  data.cleaning_fee = (parseFloat(data.cleaning_fee) || 0) * fraction;
+  data.extra_items = (data.extra_items || []).map(item => ({ ...item, unit_price: (parseFloat(item.unit_price) || 0) * fraction }));
+
+  const bruttoTotal = (parseFloat(data.brutto_total) || 0) * fraction;
+  const vatRate = parseFloat(data.vat_rate || 7);
+  const nettoTotal = bruttoTotal / (1 + vatRate / 100);
+  const vatAmount = bruttoTotal - nettoTotal;
+  data.brutto_total = bruttoTotal;
+  data.netto_total = nettoTotal;
+  data.vat_amount = vatAmount;
+
+  const fullTotal = parseFloat(booking.total_price || 0).toFixed(2);
+  const pct = Math.round(fraction * 1000) / 10;
+
+  data._type = 'partial';
+  data._title = lang === 'en' ? 'Partial Invoice' : 'Teilrechnung';
+  data.reference_line = lang === 'en'
+    ? `This is a partial invoice for ${pct}% of the total amount of ${fullTotal} €.`
+    : `Dies ist eine Teilrechnung über ${pct}% des Gesamtbetrags von ${fullTotal} €.`;
+
+  const safeName = (data.guest_name || 'booking').replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+  data._filename = t.filename(data.invoice_number || booking.id, safeName);
+
+  return data;
+}
+
 // ─── Generate PDF from preview data ─────────────────────────────────────────
 
 export async function exportInvoiceFromData(data) {

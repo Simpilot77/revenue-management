@@ -650,12 +650,20 @@ export default function CalendarPage() {
               ) : (
                 <div className="text-gray-500 mb-2">Alle Vor-Check-in-Aufgaben sind erledigt.</div>
               )}
-              <button
-                className="text-blue-600 hover:text-blue-800 text-xs font-medium"
-                onClick={() => { navigate(`/bookings/${readinessPopup.booking.id}/edit`); setReadinessPopup(null); }}
-              >
-                Zur Buchung →
-              </button>
+              <div className="flex gap-3">
+                <button
+                  className="text-blue-600 hover:text-blue-800 text-xs font-medium"
+                  onClick={() => { navigate(`/tasks?booking=${readinessPopup.booking.id}`); setReadinessPopup(null); }}
+                >
+                  📋 Zu den Aufgaben
+                </button>
+                <button
+                  className="text-blue-600 hover:text-blue-800 text-xs font-medium"
+                  onClick={() => { navigate(`/bookings/${readinessPopup.booking.id}/edit`); setReadinessPopup(null); }}
+                >
+                  📝 Zur Buchung →
+                </button>
+              </div>
             </div>
           </div>
         );

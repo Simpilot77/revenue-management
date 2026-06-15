@@ -6,6 +6,7 @@ import {
   PieChart, Pie, Cell, Legend, LineChart, Line, CartesianGrid
 } from 'recharts';
 import api from '../utils/api';
+import { findInvoiceNumberGaps, isManualInvoiceNumber } from '../utils/numbering';
 import { formatCurrency, formatPercent, formatDate, MONTH_NAMES, STATUS_LABELS, STATUS_COLORS, PAYMENT_STATUS_LABELS, PAYMENT_STATUS_COLORS } from '../utils/format';
 
 function DrillDownModal({ title, bookingIds, onClose }) {
@@ -89,6 +90,7 @@ export default function ReportsPage() {
   const [bookingsDetail, setBookingsDetail] = useState([]);
   const [bookingsLoading, setBookingsLoading] = useState(false);
   const [sortBy, setSortBy] = useState('checkin_date');
+  const [sortDir, setSortDir] = useState('desc');
   const [drillDown, setDrillDown] = useState(null);
   const [guestDist, setGuestDist] = useState([]);
 
@@ -506,16 +508,29 @@ export default function ReportsPage() {
 
           {/* Tab 7: Buchungsübersicht */}
           {tab === 7 && (() => {
-            const SORT_OPTIONS = [
-              { value: 'checkin_date',  label: 'Anreise' },
-              { value: 'checkout_date', label: 'Abreise' },
-              { value: 'booking_date',  label: 'Buchungsdatum' },
-              { value: 'guest_name',    label: 'Gast' },
-              { value: 'net',           label: 'Netto' },
-              { value: 'gross',         label: 'Brutto' },
-              { value: 'nights',        label: 'Nächte' },
-              { value: 'house_short',   label: 'Haus' },
+            const COLUMNS = [
+              { label: 'Rechnungsnr.', field: 'invoice_number' },
+              { label: 'Haus',         field: 'house_short' },
+              { label: 'Gast',         field: 'guest_name' },
+              { label: 'Kanal',        field: 'channel_short' },
+              { label: 'Buchungsdatum',field: 'booking_date' },
+              { label: 'Check-in',     field: 'checkin_date' },
+              { label: 'Check-out',    field: 'checkout_date' },
+              { label: 'Nächte',       field: 'nights' },
+              { label: 'Status',       field: 'status' },
+              { label: 'Brutto',       field: 'gross' },
+              { label: 'Komm. %',      field: 'commRate' },
+              { label: 'Komm. €',      field: 'commAmt' },
+              { label: 'Netto',        field: 'net' },
             ];
+            const toggleSort = (field) => {
+              if (sortBy === field) {
+                setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+              } else {
+                setSortBy(field);
+                setSortDir('desc');
+              }
+            };
             const mapped = bookingsDetail.map(b => {
               const ch = channels.find(c => c.id === b.channel_id);
               const commRate = ch?.commission_rate ?? 0;
@@ -524,41 +539,19 @@ export default function ReportsPage() {
               const net = gross - commAmt;
               return { ...b, commRate, commAmt, net, gross, channelColor: ch?.color };
             });
+            const dir = sortDir === 'asc' ? 1 : -1;
             const rows = [...mapped].sort((a, b) => {
               const av = a[sortBy], bv = b[sortBy];
-              if (typeof av === 'number') return bv - av;
-              return String(av || '').localeCompare(String(bv || ''));
+              if (typeof av === 'number') return (av - bv) * dir;
+              return String(av || '').localeCompare(String(bv || '')) * dir;
             });
             const totalGross = rows.reduce((s, r) => s + r.net + r.commAmt, 0);
             const totalComm = rows.reduce((s, r) => s + r.commAmt, 0);
             const totalNet = rows.reduce((s, r) => s + r.net, 0);
 
-            // Gap detection: per house+year, find missing sequence numbers
-            const gapWarnings = (() => {
-              const byHouseYear = {};
-              rows.forEach(r => {
-                if (!r.invoice_number) return;
-                const parts = r.invoice_number.split('-');
-                if (parts.length < 3) return;
-                const key = `${parts[0]}-${parts[1]}`; // e.g. "15a-2026"
-                const num = parseInt(parts[2]);
-                if (isNaN(num)) return;
-                if (!byHouseYear[key]) byHouseYear[key] = [];
-                byHouseYear[key].push(num);
-              });
-              const warnings = [];
-              Object.entries(byHouseYear).forEach(([key, nums]) => {
-                const sorted = [...nums].sort((a, b) => a - b);
-                const gaps = [];
-                for (let i = sorted[0]; i <= sorted[sorted.length - 1]; i++) {
-                  if (!sorted.includes(i)) gaps.push(i);
-                }
-                if (gaps.length) {
-                  warnings.push(`${key}: fehlende Nummern ${gaps.map(n => String(n).padStart(4,'0')).join(', ')}`);
-                }
-              });
-              return warnings;
-            })();
+            // Gap detection: per house+year, find missing sequence numbers (starting at 1000)
+            const gapWarnings = Object.entries(findInvoiceNumberGaps(rows.map(r => r.invoice_number)))
+              .map(([key, missing]) => `${key}: fehlende Nummern ${missing.map(n => String(n).padStart(4,'0')).join(', ')}`);
 
             // Rows missing invoice number
             const missingInvoice = new Set(rows.filter(r => !r.invoice_number).map(r => r.id));
@@ -585,18 +578,6 @@ export default function ReportsPage() {
                     {gapWarnings.map((w, i) => <div key={i} className="text-xs">{w}</div>)}
                   </div>
                 )}
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-gray-500">Sortierung:</label>
-                  <select
-                    className="form-select w-44 text-sm py-1"
-                    value={sortBy}
-                    onChange={e => setSortBy(e.target.value)}
-                  >
-                    {SORT_OPTIONS.map(o => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                </div>
                 {bookingsLoading ? (
                   <div className="text-center text-gray-400 py-12">Daten werden geladen…</div>
                 ) : (
@@ -605,15 +586,26 @@ export default function ReportsPage() {
                       <table className="w-full text-sm">
                         <thead className="bg-gray-50 border-b">
                           <tr>
-                            {['Rechnungsnr.','Haus','Gast','Kanal','Buchungsdatum','Check-in','Check-out','Nächte','Status','Brutto','Komm. %','Komm. €','Netto'].map(h => (
-                              <th key={h} className="text-left text-gray-500 font-medium px-3 py-3 whitespace-nowrap">{h}</th>
+                            {COLUMNS.map(c => (
+                              <th key={c.field} className="text-left text-gray-500 font-medium px-3 py-3 whitespace-nowrap">
+                                <button
+                                  className="inline-flex items-center gap-1 hover:text-gray-800"
+                                  onClick={() => toggleSort(c.field)}
+                                >
+                                  {c.label}
+                                  {sortBy === c.field && <span className="text-xs">{sortDir === 'asc' ? '▲' : '▼'}</span>}
+                                </button>
+                              </th>
                             ))}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
                           {rows.map(r => (
                             <tr key={r.id} className={missingInvoice.has(r.id) ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'}>
-                              <td className="px-3 py-2 font-mono text-xs text-gray-700">{r.invoice_number || <span className="text-gray-300">—</span>}</td>
+                              <td className="px-3 py-2 font-mono text-xs text-gray-700">
+                                {r.invoice_number || <span className="text-gray-300">—</span>}
+                                {r.invoice_number && isManualInvoiceNumber(r) && <span className="ml-1" title="Manuell eingegeben">✍️</span>}
+                              </td>
                               <td className="px-3 py-2 font-medium">{r.house_short}</td>
                               <td className="px-3 py-2">
                                 <div className="font-medium">{r.guest_name}</div>

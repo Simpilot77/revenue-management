@@ -2,9 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../utils/api';
 import { nightsBetween, formatCurrency, formatDate, STATUS_LABELS } from '../utils/format';
-import { buildInvoicePreviewData, buildStornoPreviewData, exportInvoiceFromData } from '../utils/pdfExport';
-import { splitInvoiceNumber, composeInvoiceNumber, suggestNextInvoiceNumber } from '../utils/numbering';
-import InvoicePreviewModal from '../components/InvoicePreviewModal';
+import { splitInvoiceNumber, composeInvoiceNumber, isManualInvoiceNumber } from '../utils/numbering';
+import InvoiceListSection from '../components/InvoiceListSection';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -56,8 +55,8 @@ const EMPTY_FORM = {
 function Section({ title, children }) {
   return (
     <div className="card">
-      <h3 className="font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-100">{title}</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{children}</div>
+      <h3 className="font-semibold text-gray-800 mb-3 pb-2 border-b border-gray-100">{title}</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">{children}</div>
     </div>
   );
 }
@@ -84,15 +83,13 @@ export default function BookingFormPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [invoiceLoading, setInvoiceLoading] = useState(false);
-  const [invoiceLang, setInvoiceLang] = useState('de');
+  const [invoiceLang] = useState('de');
   const [duplicates, setDuplicates] = useState([]);
   const [deleteConfirm, setDeleteConfirm] = useState(null); // booking to delete
-  const [invoicePreview, setInvoicePreview] = useState(null); // editable invoice data object
   const [lastInvNum, setLastInvNum] = useState(null); // last issued invoice number for this house
   const [guestChangeModal, setGuestChangeModal] = useState(null); // { payload, otherBookings, guestFields }
   const [depositModal, setDepositModal] = useState(null); // { amount } while editing deposit amount
   const [statusWarning, setStatusWarning] = useState(null); // Warntext bei Status-Logikcheck
-  const [stornoLoading, setStornoLoading] = useState(false);
   const cleaningDateTouched = useRef(false);
 
   // ── localStorage helpers for task sync ──
@@ -565,9 +562,9 @@ export default function BookingFormPage() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-4">
         {/* Object & Channel */}
-        <Section title="📍 Objekt & Buchungskanal">
+        <Section title="📍 Objekt, Kanal & Belegung">
           <Field label="Haus *">
             <select className="form-select" value={form.house_id} onChange={e => set('house_id', e.target.value)} required>
               <option value="">Bitte wählen…</option>
@@ -582,6 +579,15 @@ export default function BookingFormPage() {
           </Field>
           <Field label="Externe Buchungsnr.">
             <input className="form-input" value={form.external_reference} onChange={e => set('external_reference', e.target.value)} placeholder="BDC-12345678" />
+          </Field>
+          <Field label="Anzahl Gäste gesamt *">
+            <input type="number" className="form-input" min="1" max="20" value={form.guest_count} onChange={e => setNum('guest_count', e.target.value)} required />
+          </Field>
+          <Field label="davon Erwachsene">
+            <input type="number" className="form-input" min="0" max="20" value={form.adults} onChange={e => setNum('adults', e.target.value)} />
+          </Field>
+          <Field label="davon Kinder">
+            <input type="number" className="form-input" min="0" max="20" value={form.children} onChange={e => setNum('children', e.target.value)} />
           </Field>
         </Section>
 
@@ -651,7 +657,7 @@ export default function BookingFormPage() {
               <span>📬 Rechnungsadresse</span>
               <span className="text-gray-300 font-normal normal-case tracking-normal">— leer lassen = Aufenthaltsadresse (Haus) wird verwendet</span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               <Field label="Straße + Hausnummer" span={1}>
                 <input className="form-input" value={form.billing_street} onChange={e => set('billing_street', e.target.value)} placeholder="Musterstraße 12" />
               </Field>
@@ -666,19 +672,6 @@ export default function BookingFormPage() {
               </Field>
             </div>
           </div>
-        </Section>
-
-        {/* Occupancy */}
-        <Section title="🛏️ Belegung">
-          <Field label="Anzahl Gäste gesamt *">
-            <input type="number" className="form-input" min="1" max="20" value={form.guest_count} onChange={e => setNum('guest_count', e.target.value)} required />
-          </Field>
-          <Field label="davon Erwachsene">
-            <input type="number" className="form-input" min="0" max="20" value={form.adults} onChange={e => setNum('adults', e.target.value)} />
-          </Field>
-          <Field label="davon Kinder">
-            <input type="number" className="form-input" min="0" max="20" value={form.children} onChange={e => setNum('children', e.target.value)} />
-          </Field>
         </Section>
 
         {/* Pricing */}
@@ -757,7 +750,7 @@ export default function BookingFormPage() {
               <option value="erstattet">Erstattet</option>
             </select>
           </Field>
-          <Field label="Rechnungsnummer (Präfix / Jahr / Nr.)">
+          <Field label={<>Rechnungsnummer (Präfix / Jahr / Nr.){isManualInvoiceNumber(savedBooking) && <span className="ml-1" title="Manuell eingegeben">✍️</span>}</>}>
             <div className="flex gap-1 items-center">
               <input
                 className="form-input font-mono text-sm"
@@ -801,60 +794,29 @@ export default function BookingFormPage() {
               <p className="text-xs text-gray-400 mt-0.5">Letzte vergebene Nr.: <span className="font-mono text-gray-500">{lastInvNum}</span></p>
             )}
           </Field>
+          {(form.status === 'storniert' || form.status === 'no_show') && (
+            <>
+              <Field label="Stornierungsdatum">
+                <input type="date" className="form-input" value={form.cancellation_date} onChange={e => set('cancellation_date', e.target.value)} />
+              </Field>
+              <Field label="Stornierungsgrund" span={2}>
+                <input className="form-input" value={form.cancellation_reason} onChange={e => set('cancellation_reason', e.target.value)} placeholder="Grund der Stornierung…" />
+              </Field>
+            </>
+          )}
         </Section>
 
         {/* Invoices list */}
-        {isEdit && savedBooking?.invoices?.length > 0 && (
-          <div className="card">
-            <h3 className="font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-100">🧾 Rechnungen</h3>
-            <div className="space-y-2">
-              {savedBooking.invoices.map(inv => {
-                const isStornoed = savedBooking.invoices.some(
-                  other => other.type === 'storno' && other.reference_invoice_id === inv.id
-                );
-                return (
-                  <div key={inv.id} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-gray-50">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="font-mono text-sm text-gray-700">{inv.invoice_number}</span>
-                      <span className="text-xs text-gray-400">{inv.invoice_date}</span>
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${inv.type === 'storno' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                        {inv.type === 'storno' ? 'Storno' : 'Normal'}
-                      </span>
-                      {inv.type === 'storno' && inv.reference_invoice_number && (
-                        <span className="text-xs text-gray-400 truncate">↩ Storno zu {inv.reference_invoice_number}</span>
-                      )}
-                      <span className="text-sm text-gray-600">{formatCurrency(inv.brutto_total)}</span>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <button
-                        type="button"
-                        className="btn-secondary text-xs px-2 py-1"
-                        onClick={() => exportInvoiceFromData(inv.data)}
-                      >
-                        📄 PDF erneut
-                      </button>
-                      {inv.type === 'normal' && !isStornoed && (
-                        <button
-                          type="button"
-                          className="btn-secondary text-xs px-2 py-1 text-red-600"
-                          disabled={stornoLoading}
-                          onClick={async () => {
-                            setStornoLoading(true);
-                            try {
-                              const nextNumber = await suggestNextInvoiceNumber(savedBooking.house_id);
-                              setInvoicePreview(buildStornoPreviewData(inv, nextNumber, inv.lang || 'de'));
-                            } finally { setStornoLoading(false); }
-                          }}
-                        >
-                          {stornoLoading ? '…' : '🔴 Stornieren'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+        {isEdit && savedBooking && (
+          <InvoiceListSection
+            booking={{
+              ...savedBooking, ...form,
+              house_name: houses.find(h => h.id === parseInt(form.house_id))?.name || savedBooking.house_name,
+              channel_name: channels.find(c => c.id === parseInt(form.channel_id))?.name || savedBooking.channel_name,
+            }}
+            invoiceLang={invoiceLang}
+            onUpdate={() => api.get(`/bookings/${savedBooking.id}`).then(r => setSavedBooking(r.data))}
+          />
         )}
 
         {/* Status checkboxes */}
@@ -962,37 +924,13 @@ export default function BookingFormPage() {
           </div>
         )}
 
-        {/* Booking Status */}
-        <Section title="📌 Buchungsstatus">
-          <Field label="Status">
-            <select className="form-select" value={form.status} onChange={e => set('status', e.target.value)}>
-              <option value="angefragt">Angefragt</option>
-              <option value="bestaetigt">Bestätigt</option>
-              <option value="eingecheckt">Eingecheckt</option>
-              <option value="ausgecheckt">Ausgecheckt</option>
-              <option value="storniert">Storniert</option>
-              <option value="no_show">No-Show</option>
-            </select>
-          </Field>
-          {form.status === 'storniert' && (
-            <>
-              <Field label="Stornierungsdatum">
-                <input type="date" className="form-input" value={form.cancellation_date} onChange={e => set('cancellation_date', e.target.value)} />
-              </Field>
-              <Field label="Stornierungsgrund" span={2}>
-                <input className="form-input" value={form.cancellation_reason} onChange={e => set('cancellation_reason', e.target.value)} placeholder="Grund der Stornierung…" />
-              </Field>
-            </>
-          )}
-        </Section>
-
         {/* Notes */}
         <Section title="📝 Notizen">
           <Field label="Gastnotizen (für Gast sichtbar)" span={3}>
-            <textarea className="form-input" rows="3" value={form.guest_notes} onChange={e => set('guest_notes', e.target.value)} placeholder="Besondere Wünsche, Anmerkungen des Gastes…" />
+            <textarea className="form-input" rows="2" value={form.guest_notes} onChange={e => set('guest_notes', e.target.value)} placeholder="Besondere Wünsche, Anmerkungen des Gastes…" />
           </Field>
           <Field label="Interne Notizen (nur intern)" span={3}>
-            <textarea className="form-input" rows="3" value={form.internal_notes} onChange={e => set('internal_notes', e.target.value)} placeholder="Interne Hinweise, Aufgaben…" />
+            <textarea className="form-input" rows="2" value={form.internal_notes} onChange={e => set('internal_notes', e.target.value)} placeholder="Interne Hinweise, Aufgaben…" />
           </Field>
         </Section>
 
@@ -1054,25 +992,7 @@ export default function BookingFormPage() {
           </div>
         )}
 
-        <div className="flex justify-between items-center pb-6">
-          <div>
-            {isEdit && savedBooking && (
-              <button
-                type="button"
-                onClick={() => {
-                  const booking = {
-                    ...savedBooking, ...form,
-                    house_name: houses.find(h => h.id === parseInt(form.house_id))?.name || savedBooking.house_name,
-                    channel_name: channels.find(c => c.id === parseInt(form.channel_id))?.name || savedBooking.channel_name,
-                  };
-                  setInvoicePreview({ ...buildInvoicePreviewData(booking, invoiceLang), extra_items: [] });
-                }}
-                className="btn-secondary flex items-center gap-2"
-              >
-                🧾 Neue Rechnung erstellen…
-              </button>
-            )}
-          </div>
+        <div className="flex justify-end items-center pb-6">
           <div className="flex gap-3">
             <button type="button" onClick={() => navigate(-1)} className="btn-secondary">Abbrechen</button>
             <button type="submit" className="btn-primary px-8" disabled={loading}>
@@ -1081,40 +1001,6 @@ export default function BookingFormPage() {
           </div>
         </div>
       </form>
-
-    {/* ── Invoice Preview Modal ── */}
-    {invoicePreview && (
-      <InvoicePreviewModal
-        data={invoicePreview}
-        onClose={() => {
-          setInvoicePreview(null);
-          if (savedBooking) api.get(`/bookings/${savedBooking.id}`).then(r => setSavedBooking(r.data));
-        }}
-        onLangChange={(lang) => {
-          const booking = {
-            ...savedBooking, ...form,
-            house_name: houses.find(h => h.id === parseInt(form.house_id))?.name || savedBooking?.house_name,
-          };
-          const fresh = buildInvoicePreviewData(booking, lang);
-          setInvoicePreview(prev => ({
-            ...fresh,
-            company_name: prev.company_name,
-            guest_name: prev.guest_name,
-            billing_street: prev.billing_street,
-            billing_zip: prev.billing_zip,
-            billing_city: prev.billing_city,
-            billing_country: prev.billing_country,
-            invoice_number: prev.invoice_number,
-            invoice_date: prev.invoice_date,
-            service_period: prev.service_period,
-            customer_number: prev.customer_number,
-            extra_items: prev.extra_items || [],
-          }));
-          setInvoiceLang(lang);
-        }}
-        onChange={(field, value) => setInvoicePreview(prev => ({ ...prev, [field]: value }))}
-      />
-    )}
     </div>
   );
 }

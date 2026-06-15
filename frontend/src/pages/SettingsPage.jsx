@@ -397,6 +397,14 @@ export default function SettingsPage() {
             placeholder="z. B. +49 170 1234567"
           />
         </Field>
+        <Field label="E-Mail-Adresse (für E-Mail-Benachrichtigung)">
+          <input
+            className="form-input w-full"
+            value={settings.cleaning_notification?.email || ''}
+            onChange={e => setCleaningNotif('email', e.target.value)}
+            placeholder="z. B. reinigung@beispiel.de"
+          />
+        </Field>
         <Field label="Textvorlage">
           <textarea
             className="form-input w-full"

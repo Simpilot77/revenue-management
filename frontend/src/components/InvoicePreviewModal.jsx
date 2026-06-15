@@ -64,6 +64,7 @@ export default function InvoicePreviewModal({ data, onClose, onLangChange, onCha
     const next = { ...invParts, [part]: value };
     setInvParts(next);
     set('invoice_number', composeInvoiceNumber(next));
+    set('_manual_invoice_number', true);
   };
 
   // ── Auto / conflict handling for invoice & customer numbers ──
@@ -75,6 +76,7 @@ export default function InvoicePreviewModal({ data, onClose, onLangChange, onCha
       const next = await suggestNextInvoiceNumber(data._house_id);
       setInvParts(splitInvoiceNumber(next));
       set('invoice_number', next);
+      set('_manual_invoice_number', false);
       await commitInvoiceNumber(next);
     } finally { setAutoLoading(false); }
   };
@@ -129,6 +131,7 @@ export default function InvoicePreviewModal({ data, onClose, onLangChange, onCha
           invoice_date: data.invoice_date,
           brutto_total: data.brutto_total,
           lang: data.lang,
+          manual: !!data._manual_invoice_number,
           data,
         });
       }
@@ -164,7 +167,7 @@ export default function InvoicePreviewModal({ data, onClose, onLangChange, onCha
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50 rounded-t-xl">
           <h2 className="text-base font-semibold text-gray-900">
-            {data._type === 'storno' ? '🧾 Stornorechnung erstellen' : '🧾 Rechnung erstellen'}
+            {data._type === 'storno' ? '🧾 Stornorechnung erstellen' : data._type === 'partial' ? '🧾 Teilrechnung erstellen' : '🧾 Rechnung erstellen'}
           </h2>
           <div className="flex items-center gap-3">
             <div className="flex rounded-lg overflow-hidden border border-gray-300 text-sm">
@@ -184,6 +187,13 @@ export default function InvoicePreviewModal({ data, onClose, onLangChange, onCha
         {data._type === 'storno' && (
           <div className="px-6 py-3 bg-red-50 border-b border-red-200 text-sm text-red-700 font-medium">
             🔴 Stornorechnung — bezieht sich auf Rechnung Nr. {data._reference_invoice_number}
+          </div>
+        )}
+
+        {/* Teilrechnung-Banner */}
+        {data._type === 'partial' && (
+          <div className="px-6 py-3 bg-blue-50 border-b border-blue-200 text-sm text-blue-700 font-medium">
+            ✂️ Teilrechnung — {data.reference_line}
           </div>
         )}
 

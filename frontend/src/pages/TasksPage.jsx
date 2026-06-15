@@ -1,8 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../utils/api';
 import { formatCurrency, formatDateFull } from '../utils/format';
 import { buildInvoicePreviewData, exportWorkSchedule } from '../utils/pdfExport';
 import InvoicePreviewModal from '../components/InvoicePreviewModal';
+import InvoiceListSection from '../components/InvoiceListSection';
 import { applyInvoiceNumber } from '../utils/numbering';
 import { onDataChange, emitDataChange } from '../utils/syncBus';
 
@@ -862,10 +864,19 @@ function TaskRow({ task, booking, tasks, today, invoiceNum, setInvoiceNum, onTog
 
 // ─── Single Booking Task Card ─────────────────────────────────────────────────
 
-function BookingTaskCard({ booking, onTaskChange }) {
+function BookingTaskCard({ booking, onTaskChange, highlight }) {
   const [tasks, setTasks] = useState(() => getBookingTasks(booking.id));
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(!!highlight);
   const [, rerender] = useState(0);
+  const [highlighted, setHighlighted] = useState(!!highlight);
+  const cardRef = useRef(null);
+
+  useEffect(() => {
+    if (!highlight) return;
+    cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const t = setTimeout(() => setHighlighted(false), 2000);
+    return () => clearTimeout(t);
+  }, [highlight]);
   const [note, setNote] = useState(() => getBookingNote(booking.id));
   const [invoiceNum, setInvoiceNum] = useState(booking.invoice_number || '');
   const [invoicePreview, setInvoicePreview] = useState(null);
@@ -910,7 +921,7 @@ function BookingTaskCard({ booking, onTaskChange }) {
   };
 
   return (
-    <div className={`card transition-all ${borderColor}`}>
+    <div ref={cardRef} className={`card transition-all ${borderColor} ${highlighted ? 'ring-2 ring-blue-400' : ''}`}>
       {/* Header row */}
       <div
         className="flex items-center gap-4 cursor-pointer select-none"
@@ -1032,6 +1043,17 @@ function BookingTaskCard({ booking, onTaskChange }) {
               onChange={e => { setNote(e.target.value); setBookingNote(booking.id, e.target.value); }}
             />
           </div>
+
+          {/* Rechnungen / Storno / Teilrechnung */}
+          {booking.invoices?.length > 0 && (
+            <div onClick={e => e.stopPropagation()}>
+              <InvoiceListSection
+                booking={booking}
+                invoiceLang={invoiceLang}
+                onUpdate={() => emitDataChange({ type: 'invoice' })}
+              />
+            </div>
+          )}
 
           {/* Task timeline */}
           <TaskTimeline booking={booking} tasks={tasks} />
@@ -1328,10 +1350,12 @@ function useLiveClock() {
 }
 
 export default function TasksPage() {
+  const [searchParams] = useSearchParams();
+  const highlightBookingId = searchParams.get('booking');
   const [houses, setHouses]       = useState([]);
   const [bookings, setBookings]   = useState([]);
   const [loading, setLoading]     = useState(true);
-  const [filter, setFilter]       = useState('current');
+  const [filter, setFilter]       = useState(() => highlightBookingId ? 'all' : 'current');
   const [houseFilter, setHouseFilter] = useState(''); // '' = all houses
   const [tab, setTab]             = useState('tasks'); // 'tasks' | 'todo'
   const [, rerender]              = useState(0);
@@ -1560,6 +1584,7 @@ export default function TasksPage() {
                   key={b.id}
                   booking={b}
                   onTaskChange={handleTaskChange}
+                  highlight={highlightBookingId != null && String(b.id) === highlightBookingId}
                 />
               ))}
             </div>

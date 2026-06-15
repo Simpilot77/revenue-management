@@ -2,7 +2,10 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { formatCurrency, formatDate, STATUS_LABELS, STATUS_COLORS } from '../utils/format';
-import { onDataChange } from '../utils/syncBus';
+import { onDataChange, emitDataChange } from '../utils/syncBus';
+import { findInvoiceNumberGaps, isManualInvoiceNumber, suggestNextInvoiceNumber } from '../utils/numbering';
+import { buildStornoPreviewData, buildPartialInvoicePreviewData, buildInvoicePreviewData } from '../utils/pdfExport';
+import InvoicePreviewModal from '../components/InvoicePreviewModal';
 
 const ACTIVE_STATUSES = ['bestaetigt', 'eingecheckt', 'ausgecheckt'];
 
@@ -16,25 +19,42 @@ function flattenInvoiceRows(bookings) {
     .forEach(b => {
       if (b.invoices?.length) {
         b.invoices.forEach(inv => {
+          const isStornoed = b.invoices.some(
+            other => other.type === 'storno' && other.reference_invoice_id === inv.id
+          );
           rows.push({
             rowId: `${b.id}-${inv.id}`,
             booking: b,
+            invoice: inv,
+            isStornoed,
             invoice_number: (inv.invoice_number || '').trim(),
             type: inv.type || 'normal',
             reference_invoice_number: inv.reference_invoice_number || null,
             invoice_date: inv.invoice_date || null,
             brutto_total: inv.brutto_total,
+            manual: isManualInvoiceNumber(b, inv),
           });
         });
       } else if (b.invoice_number) {
         rows.push({
           rowId: `${b.id}-legacy`,
           booking: b,
+          invoice: {
+            id: `legacy-${b.id}`,
+            invoice_number: b.invoice_number.trim(),
+            type: 'normal',
+            invoice_date: null,
+            brutto_total: Number(b.total_price),
+            lang: 'de',
+            data: buildInvoicePreviewData(b, 'de'),
+          },
+          isStornoed: false,
           invoice_number: b.invoice_number.trim(),
           type: 'normal',
           reference_invoice_number: null,
           invoice_date: null,
           brutto_total: Number(b.total_price),
+          manual: isManualInvoiceNumber(b),
         });
       }
     });
@@ -44,34 +64,16 @@ function flattenInvoiceRows(bookings) {
 function analyzeInvoices(bookings) {
   const rows = flattenInvoiceRows(bookings);
 
-  const byHouseYear = {};
   const invoiceMap = {};
   rows.forEach(row => {
     const inv = row.invoice_number;
     if (!inv) return;
     if (!invoiceMap[inv]) invoiceMap[inv] = [];
     invoiceMap[inv].push(row.rowId);
-
-    const parts = inv.split('-');
-    if (parts.length >= 3) {
-      const key = `${parts[0]}-${parts[1]}`;
-      const num = parseInt(parts[2]);
-      if (!isNaN(num)) {
-        if (!byHouseYear[key]) byHouseYear[key] = [];
-        byHouseYear[key].push(num);
-      }
-    }
   });
 
-  const gaps = [];
-  Object.entries(byHouseYear).forEach(([key, nums]) => {
-    const sorted = [...nums].sort((a, b) => a - b);
-    const missing = [];
-    for (let i = sorted[0]; i <= sorted[sorted.length - 1]; i++) {
-      if (!sorted.includes(i)) missing.push(i);
-    }
-    if (missing.length) gaps.push({ key, missing });
-  });
+  const gapsByKey = findInvoiceNumberGaps(rows.map(r => r.invoice_number));
+  const gaps = Object.entries(gapsByKey).map(([key, missing]) => ({ key, missing }));
 
   const duplicates = new Set();
   Object.entries(invoiceMap).forEach(([inv, ids]) => {
@@ -86,6 +88,8 @@ function analyzeInvoices(bookings) {
 export default function InvoiceManagementPage() {
   const navigate = useNavigate();
   const [bookings, setBookings] = useState([]);
+  const [invoicePreview, setInvoicePreview] = useState(null);
+  const [busyRowId, setBusyRowId] = useState(null);
 
   const load = useCallback(() => {
     api.get('/bookings', { params: { limit: 500 } }).then(res => {
@@ -100,6 +104,36 @@ export default function InvoiceManagementPage() {
   }), [load]);
 
   const { sorted, gaps, duplicates } = useMemo(() => analyzeInvoices(bookings), [bookings]);
+
+  const closeModal = () => {
+    setInvoicePreview(null);
+    load();
+  };
+
+  const handleStorno = async (row) => {
+    setBusyRowId(row.rowId);
+    try {
+      const nextNumber = await suggestNextInvoiceNumber(row.booking.house_id);
+      setInvoicePreview(buildStornoPreviewData(row.invoice, nextNumber, row.invoice.lang || 'de'));
+    } finally { setBusyRowId(null); }
+  };
+
+  const handlePartial = async (row) => {
+    const input = window.prompt('Anteil der Teilrechnung in % (z. B. 50):', '50');
+    if (input == null) return;
+    const pct = parseFloat(input.replace(',', '.'));
+    if (isNaN(pct) || pct <= 0 || pct > 100) {
+      window.alert('Bitte einen Anteil zwischen 1 und 100 eingeben.');
+      return;
+    }
+    const fraction = pct / 100;
+    setBusyRowId(row.rowId);
+    try {
+      const nextNumber = await suggestNextInvoiceNumber(row.booking.house_id);
+      const data = buildPartialInvoicePreviewData(row.booking, fraction, row.invoice.lang || 'de');
+      setInvoicePreview({ ...data, invoice_number: nextNumber, extra_items: [], _fraction: fraction });
+    } finally { setBusyRowId(null); }
+  };
 
   return (
     <div className="p-6 space-y-4">
@@ -152,11 +186,12 @@ export default function InvoiceManagementPage() {
                 <tr key={row.rowId} className={duplicates.has(row.rowId) ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-gray-50'}>
                   <td className="px-4 py-2 font-mono whitespace-nowrap">
                     {row.invoice_number}
+                    {row.manual && <span className="ml-1 text-xs" title="Manuell eingegeben">✍️</span>}
                     {duplicates.has(row.rowId) && <span className="ml-2 text-xs font-medium text-red-600">⚠ Duplikat</span>}
                   </td>
                   <td className="px-4 py-2 whitespace-nowrap">
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${row.type === 'storno' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                      {row.type === 'storno' ? 'Storno' : 'Normal'}
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${row.type === 'storno' ? 'bg-red-100 text-red-700' : row.type === 'partial' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+                      {row.type === 'storno' ? 'Storno' : row.type === 'partial' ? 'Teil' : 'Normal'}
                     </span>
                     {row.type === 'storno' && row.reference_invoice_number && (
                       <div className="text-xs text-gray-400 mt-0.5">↩ {row.reference_invoice_number}</div>
@@ -170,7 +205,23 @@ export default function InvoiceManagementPage() {
                     <span className={`badge ${STATUS_COLORS[b.status]}`}>{STATUS_LABELS[b.status]}</span>
                   </td>
                   <td className="px-4 py-2 text-right whitespace-nowrap">
-                    <button className="btn-secondary text-xs py-1 px-2" onClick={() => navigate(`/bookings/${b.id}/edit`)}>✏️ Öffnen</button>
+                    <div className="flex justify-end gap-1.5">
+                      <button className="btn-secondary text-xs py-1 px-2" onClick={() => navigate(`/bookings/${b.id}/edit`)}>✏️ Öffnen</button>
+                      {row.invoice && (row.type === 'normal' || row.type === 'partial') && !row.isStornoed && (
+                        <>
+                          <button className="btn-secondary text-xs py-1 px-2" disabled={busyRowId === row.rowId} onClick={() => handlePartial(row)}>
+                            {busyRowId === row.rowId ? '…' : '✂️ Teilen'}
+                          </button>
+                          <button
+                            className="btn-secondary text-xs py-1 px-2 text-red-600"
+                            disabled={busyRowId === row.rowId}
+                            onClick={() => handleStorno(row)}
+                          >
+                            {busyRowId === row.rowId ? '…' : '🔴 Stornieren'}
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );
@@ -181,6 +232,15 @@ export default function InvoiceManagementPage() {
           </tbody>
         </table>
       </div>
+
+      {invoicePreview && (
+        <InvoicePreviewModal
+          data={invoicePreview}
+          onClose={closeModal}
+          onLangChange={(lang) => setInvoicePreview(prev => ({ ...prev, lang }))}
+          onChange={(field, value) => setInvoicePreview(prev => ({ ...prev, [field]: value }))}
+        />
+      )}
     </div>
   );
 }

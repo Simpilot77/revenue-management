@@ -5,6 +5,7 @@
 import api, { getCustomers } from './api';
 import { BOOKINGS } from './mockData';
 import { emitDataChange } from './syncBus';
+import { buildInvoicePreviewData } from './pdfExport';
 
 // Returns the first item in `list` (other than `excludeId`) that already has
 // `value` for `field`, or null if there's no conflict.
@@ -87,11 +88,65 @@ export function getAllInvoiceNumbers(excludeBookingId, excludeInvoiceId) {
 // invoices, also keeps `booking.invoice_number` in sync (as before).
 export async function recordInvoice(bookingId, invoiceEntry) {
   const target = BOOKINGS.find(b => b.id === bookingId) || {};
-  const invoices = [...(target.invoices || []), invoiceEntry];
+  const invoices = [...(target.invoices || [])];
+  // Bookings created before per-invoice tracking only have `invoice_number`.
+  // Seed a synthetic "normal" entry for it so Storno/Teilrechnung can
+  // reference a concrete invoice snapshot going forward.
+  if (invoices.length === 0 && target.invoice_number) {
+    invoices.push({
+      id: `legacy-${bookingId}`,
+      invoice_number: target.invoice_number,
+      type: 'normal',
+      invoice_date: null,
+      brutto_total: Number(target.total_price || 0),
+      lang: 'de',
+      manual: isManualInvoiceNumber(target),
+      data: buildInvoicePreviewData(target, 'de'),
+    });
+  }
+  invoices.push(invoiceEntry);
   const updates = { ...target, invoices };
-  if (invoiceEntry.type === 'normal') updates.invoice_number = invoiceEntry.invoice_number;
+  if (invoiceEntry.type === 'normal' || invoiceEntry.type === 'partial') updates.invoice_number = invoiceEntry.invoice_number;
   await api.put(`/bookings/${bookingId}`, updates);
   emitDataChange({ type: 'invoice' });
+}
+
+// Groups invoice numbers by `${prefix}-${year}` (house + year, e.g. "15a-2026")
+// and finds gaps in the sequence. Numbering always starts at 1000, so the
+// expected range for each group is 1000..max(1000, highest assigned number).
+// Returns { [key]: number[] } — groups without gaps are omitted.
+export function findInvoiceNumberGaps(invoiceNumbers) {
+  const byHouseYear = {};
+  invoiceNumbers.forEach(inv => {
+    const parts = String(inv || '').split('-');
+    if (parts.length < 3) return;
+    const key = `${parts[0]}-${parts[1]}`;
+    const num = parseInt(parts[2]);
+    if (isNaN(num)) return;
+    if (!byHouseYear[key]) byHouseYear[key] = [];
+    byHouseYear[key].push(num);
+  });
+
+  const gaps = {};
+  Object.entries(byHouseYear).forEach(([key, nums]) => {
+    const present = new Set(nums);
+    const highest = Math.max(1000, ...nums);
+    const missing = [];
+    for (let i = 1000; i <= highest; i++) {
+      if (!present.has(i)) missing.push(i);
+    }
+    if (missing.length) gaps[key] = missing;
+  });
+  return gaps;
+}
+
+// Determines whether an invoice number was entered manually rather than
+// auto-generated. `invoiceEntry` is an entry from `booking.invoices[]` (with a
+// `manual` flag set by InvoicePreviewModal); if omitted, falls back to the
+// `manual_overrides` mechanism for the legacy `booking.invoice_number` field.
+export function isManualInvoiceNumber(booking, invoiceEntry) {
+  if (invoiceEntry) return !!invoiceEntry.manual;
+  return !!(booking?._has_manual_overrides && booking?._manual_fields?.includes('invoice_number'));
 }
 
 // Informative duplicate check across all invoice numbers (primary field + invoices[]).

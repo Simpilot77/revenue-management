@@ -95,6 +95,7 @@ export default function CleaningManagementPage() {
 
   const [editEntry, setEditEntry] = useState(null);
   const [form, setForm] = useState(DEFAULT_DETAILS);
+  const [notified, setNotified] = useState(() => loadMap('cleaning_notified'));
 
   useEffect(() => {
     const past30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
@@ -114,6 +115,7 @@ export default function CleaningManagementPage() {
       setExclusions(loadMap('cleaning_exclusions'));
       setDetails(loadMap('cleaning_details'));
       setTasks(loadMap('booking_tasks'));
+      setNotified(loadMap('cleaning_notified'));
     }
   }), []);
 
@@ -172,15 +174,24 @@ export default function CleaningManagementPage() {
     setForm({ ...DEFAULT_DETAILS, ...(details[entry.key] || {}) });
   };
 
-  // ── SMS / WhatsApp ────────────────────────────────────────────────────────
+  // ── SMS / WhatsApp / E-Mail ───────────────────────────────────────────────
 
   const phone = settings.cleaning_notification?.phone || '';
+  const email = settings.cleaning_notification?.email || '';
   const template = settings.cleaning_notification?.template || '';
+
+  const markNotified = (key, channel) => {
+    const updated = { ...notified, [key]: { ...(notified[key] || {}), [channel]: true } };
+    setNotified(updated);
+    saveMap('cleaning_notified', updated);
+    emitDataChange({ type: 'cleaning' });
+  };
 
   const sendSms = (entry) => {
     if (!phone) { alert('Bitte zuerst in den Einstellungen eine Telefonnummer für Reinigungs-Benachrichtigungen festlegen.'); return; }
     const msg = buildMessage(template, { ...entry, ...form, key: entry.key });
     window.location.href = `sms:${phone}?body=${encodeURIComponent(msg)}`;
+    markNotified(entry.key, 'sms');
   };
 
   const sendWhatsapp = (entry) => {
@@ -188,6 +199,15 @@ export default function CleaningManagementPage() {
     const msg = buildMessage(template, { ...entry, ...form, key: entry.key });
     const digits = phone.replace(/[^\d+]/g, '').replace(/^\+/, '');
     window.open(`https://wa.me/${digits}?text=${encodeURIComponent(msg)}`, '_blank');
+    markNotified(entry.key, 'whatsapp');
+  };
+
+  const sendEmail = (entry) => {
+    if (!email) { alert('Bitte zuerst in den Einstellungen eine E-Mail-Adresse für Reinigungs-Benachrichtigungen festlegen.'); return; }
+    const msg = buildMessage(template, { ...entry, ...form, key: entry.key });
+    const subject = `Reinigung ${entry.houseName} – ${formatDateFull(entry.date)}`;
+    window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(msg)}`;
+    markNotified(entry.key, 'email');
   };
 
   return (
@@ -268,8 +288,18 @@ export default function CleaningManagementPage() {
                 <td className="px-4 py-2 max-w-[200px] truncate text-gray-500">{entry.notes || '–'}</td>
                 <td className="px-4 py-2 text-right whitespace-nowrap">
                   <button className="btn-secondary text-xs py-1 px-2 mr-1" onClick={() => openEdit(entry)}>✏️ Bearbeiten</button>
-                  <button className="btn-secondary text-xs py-1 px-2 mr-1" onClick={() => sendSms(entry)}>📱 SMS</button>
-                  <button className="btn-secondary text-xs py-1 px-2" onClick={() => sendWhatsapp(entry)}>💬 WhatsApp</button>
+                  <button
+                    className={`text-xs py-1 px-2 mr-1 rounded border ${notified[entry.key]?.sms ? 'bg-green-100 text-green-700 border-green-300' : 'btn-secondary'}`}
+                    onClick={() => sendSms(entry)}
+                  >📱 SMS{notified[entry.key]?.sms ? ' ✅' : ''}</button>
+                  <button
+                    className={`text-xs py-1 px-2 mr-1 rounded border ${notified[entry.key]?.whatsapp ? 'bg-green-100 text-green-700 border-green-300' : 'btn-secondary'}`}
+                    onClick={() => sendWhatsapp(entry)}
+                  >💬 WhatsApp{notified[entry.key]?.whatsapp ? ' ✅' : ''}</button>
+                  <button
+                    className={`text-xs py-1 px-2 rounded border ${notified[entry.key]?.email ? 'bg-green-100 text-green-700 border-green-300' : 'btn-secondary'}`}
+                    onClick={() => sendEmail(entry)}
+                  >✉️ E-Mail{notified[entry.key]?.email ? ' ✅' : ''}</button>
                 </td>
               </tr>
             ))}
