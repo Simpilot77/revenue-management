@@ -860,96 +860,105 @@ export async function exportCustomers(customers) {
 
 // ─── 3. Dashboard KPI-Report ─────────────────────────────────────────────────
 
-export async function exportDashboard(kpis, monthly, houseData, year) {
+// One-page A4 "Dashboard" PDF: KPI grid + 2x2 chart images + house comparison table.
+export async function exportDashboard(kpis, houseData, cashflowTotal, chartImages = {}, periodLabel = '') {
   const logo = await getReportLogo();
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const W = doc.internal.pageSize.getWidth();
-  header(doc, `KPI-Jahresbericht ${year}`, `Erstellt: ${new Date().toLocaleDateString('de-DE')}`, logo);
+  header(doc, 'Dashboard', periodLabel, logo);
 
-  // KPI summary boxes
+  // KPI summary boxes (4 cols x 2 rows)
   const kpiItems = [
     { label: 'Auslastung', value: fmtPct(kpis.occupancy_rate) },
-    { label: 'Gesamtumsatz', value: fmt(kpis.total_revenue) },
+    { label: 'Umsatz (Accrual)', value: fmt(kpis.total_revenue) },
+    { label: 'Cash Flow', value: fmt(cashflowTotal) },
     { label: 'ADR', value: fmt(kpis.adr) },
-    { label: 'RevPAR', value: fmt(kpis.revpar) },
-    { label: 'Bestät. Buchungen', value: kpis.confirmed_bookings },
-    { label: 'Gebuchte Nächte', value: kpis.total_nights },
+    { label: 'RevPAR', value: fmt(kpis.revpar_house ?? kpis.revpar) },
     { label: 'Ø Aufenthalt', value: `${kpis.avg_los} N.` },
-    { label: 'Ø Vorlaufzeit', value: `${kpis.avg_lead_time} Tage` },
     { label: 'Stornoquote', value: fmtPct(kpis.cancellation_rate) },
-    { label: 'No-Shows', value: kpis.no_shows },
-    { label: 'Stammgäste', value: kpis.returning_guests },
-    { label: 'Verf. Bett-Nächte', value: kpis.available_bed_nights },
+    { label: 'Bestät. Buchungen', value: kpis.confirmed_bookings },
   ];
 
-  const cols = 4, bW = (W - 28 - (cols - 1) * 4) / cols, bH = 14;
+  const cols = 4, gap = 4, bW = (W - 28 - (cols - 1) * gap) / cols, bH = 16;
+  const kpiStartY = 30;
   kpiItems.forEach((item, i) => {
     const col = i % cols;
     const row = Math.floor(i / cols);
-    const x = 14 + col * (bW + 4);
-    const y = 28 + row * (bH + 3);
+    const x = 14 + col * (bW + gap);
+    const y = kpiStartY + row * (bH + 3);
     doc.setFillColor(...LIGHT);
     doc.roundedRect(x, y, bW, bH, 2, 2, 'F');
-    doc.setFontSize(6.5);
+    doc.setFontSize(7);
     doc.setTextColor(...GRAY);
     doc.setFont('helvetica', 'normal');
-    doc.text(item.label, x + bW / 2, y + 4.5, { align: 'center' });
-    doc.setFontSize(10);
+    doc.text(item.label, x + bW / 2, y + 5.5, { align: 'center' });
+    doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...BLUE);
-    doc.text(String(item.value), x + bW / 2, y + 10.5, { align: 'center' });
+    doc.text(String(item.value), x + bW / 2, y + 12, { align: 'center' });
   });
 
-  // Monthly table
+  // Charts: 2x2 grid
+  const chartsStartY = kpiStartY + 2 * (bH + 3) + 6; // 74
+  const chartGap = 6;
+  const chartW = (W - 28 - chartGap) / 2;
+  const chartImgH = 58;
+  const chartRowH = chartImgH + 8;
+
+  const charts = [
+    { title: 'Umsatz pro Monat (Accrual)', img: chartImages.umsatz },
+    { title: 'Auslastung % pro Monat', img: chartImages.auslastung },
+    { title: 'Cash Flow pro Monat (Rechnungsdatum)', img: chartImages.cashflow },
+    { title: 'RevPAR pro Monat', img: chartImages.revpar },
+  ];
+
+  charts.forEach((c, i) => {
+    const col = i % 2;
+    const row = Math.floor(i / 2);
+    const x = 14 + col * (chartW + chartGap);
+    const y = chartsStartY + row * (chartRowH + chartGap);
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...DARK);
+    doc.text(c.title, x, y + 3);
+    if (c.img) {
+      try {
+        const imgProps = doc.getImageProperties(c.img);
+        const ratio = imgProps.height / imgProps.width;
+        let imgW = chartW;
+        let imgH = imgW * ratio;
+        if (imgH > chartImgH) {
+          imgH = chartImgH;
+          imgW = imgH / ratio;
+        }
+        const imgX = x + (chartW - imgW) / 2;
+        doc.addImage(c.img, 'JPEG', imgX, y + 5, imgW, imgH);
+      } catch (_) {}
+    }
+  });
+
+  // House comparison table
+  const tableStartY = chartsStartY + 2 * (chartRowH + chartGap) + 2;
   doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...DARK);
-  doc.text('Monatliche Übersicht', 14, 95);
+  doc.text('Häuservergleich', 14, tableStartY);
 
   autoTable(doc, {
-    startY: 98,
-    head: [['Monat','Buchungen','Nächte','Auslastung','Umsatz','ADR','RevPAR']],
-    body: monthly.map(r => [
-      MONTH_NAMES[parseInt(r.month.slice(5,7)) - 1] + ' ' + year,
-      r.bookings,
-      r.booked_nights,
-      fmtPct(r.occupancy_rate),
-      fmt(r.revenue),
-      fmt(r.adr),
-      fmt(r.revpar),
-    ]),
-    styles: { fontSize: 8, cellPadding: 2.5, textColor: DARK },
-    headStyles: { fillColor: BLUE, textColor: [255,255,255], fontStyle: 'bold' },
-    alternateRowStyles: { fillColor: LIGHT },
-    columnStyles: {
-      0: { cellWidth: 24 },
-      3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' },
-    },
-    margin: { left: 14, right: 14 },
-  });
-
-  // House comparison
-  const ty = doc.lastAutoTable.finalY + 8;
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(...DARK);
-  doc.text('Häuservergleich', 14, ty);
-
-  autoTable(doc, {
-    startY: ty + 4,
-    head: [['Haus','Kapazität','Buchungen','Nächte','Auslastung','Umsatz','ADR','RevPAR','Stornos']],
+    startY: tableStartY + 3,
+    head: [['Haus','Kap.','Buchungen','Nächte','Auslastung','Umsatz','ADR','RevPAR','Stornos']],
     body: houseData.map(h => [
-      h.name, `${h.capacity} Betten`, h.bookings, h.nights,
+      h.name, `${h.capacity}`, h.bookings, h.nights,
       fmtPct(h.occupancy_rate), fmt(h.revenue), fmt(h.adr), fmt(h.revpar), h.cancellations,
     ]),
-    styles: { fontSize: 8, cellPadding: 2.5, textColor: DARK },
+    styles: { fontSize: 8, cellPadding: 2, textColor: DARK },
     headStyles: { fillColor: BLUE, textColor: [255,255,255], fontStyle: 'bold' },
     alternateRowStyles: { fillColor: LIGHT },
     columnStyles: { 4: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' }, 7: { halign: 'right' }, 8: { halign: 'center' } },
     margin: { left: 14, right: 14 },
   });
 
-  save(doc, `kpi_bericht_${year}.pdf`);
+  save(doc, `dashboard_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
 // ─── 4. Auswertungsberichte ──────────────────────────────────────────────────

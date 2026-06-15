@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import html2canvas from 'html2canvas';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   LineChart, Line, CartesianGrid, Legend, Cell, ReferenceLine,
@@ -120,6 +121,13 @@ export default function DashboardPage() {
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState(null);
   const [drillDown, setDrillDown] = useState(null);
+  const [exporting, setExporting] = useState(false);
+
+  // Refs for PDF chart capture
+  const revChartRef = useRef(null);
+  const occChartRef = useRef(null);
+  const revparChartRef = useRef(null);
+  const cashflowChartRef = useRef(null);
 
   // Chart toggles
   const [revType,    setRevType]    = useState('bar');   // 'bar' | 'line'
@@ -214,6 +222,39 @@ export default function DashboardPage() {
       .finally(() => setImporting(false));
   };
 
+  const captureChart = async (ref) => {
+    if (!ref.current) return null;
+    try {
+      const canvas = await html2canvas(ref.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+      });
+      return canvas.toDataURL('image/jpeg', 0.92);
+    } catch (e) {
+      console.warn('Chart capture failed:', e);
+      return null;
+    }
+  };
+
+  const handleDashboardPdfExport = async () => {
+    setExporting(true);
+    try {
+      const [umsatz, auslastung, revpar, cashflowImg] = await Promise.all([
+        captureChart(revChartRef),
+        captureChart(occChartRef),
+        captureChart(revparChartRef),
+        captureChart(cashflowChartRef),
+      ]);
+      const cashflowTotal = cashflow.reduce((s, r) => s + r.cashflow, 0);
+      const periodLabel = `${formatDate(from)} – ${formatDate(to)}`;
+      await exportDashboard(kpis, houseData, cashflowTotal, { umsatz, auslastung, revpar, cashflow: cashflowImg }, periodLabel);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       {drillDown && <DrillDownModal title={drillDown.title} bookingIds={drillDown.ids} onClose={() => setDrillDown(null)} />}
@@ -237,10 +278,11 @@ export default function DashboardPage() {
           </button>
           {kpis && (
             <button
-              onClick={() => exportDashboard(kpis, monthly, houseData, from.slice(0, 4))}
-              className="btn btn-secondary flex items-center gap-2 text-sm"
+              onClick={handleDashboardPdfExport}
+              disabled={exporting}
+              className="btn btn-secondary flex items-center gap-2 text-sm disabled:opacity-50"
             >
-              📄 PDF Export
+              {exporting ? '⏳' : '📄'} Dashboard PDF
             </button>
           )}
           <Link to="/bookings/new" className="btn-primary text-sm">
@@ -278,7 +320,7 @@ export default function DashboardPage() {
 
             {/* Revenue */}
             <div className="card">
-              <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+              <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
                 <h2 className="font-semibold text-gray-800">Umsatz pro Monat</h2>
                 <div className="flex gap-2 flex-wrap">
                   <ChartToggle value={revType}  onChange={setRevType}
@@ -287,6 +329,8 @@ export default function DashboardPage() {
                     options={[{ value:'total', label:'Gesamt' }, { value:'house', label:'Je Haus' }]} />
                 </div>
               </div>
+              <p className="text-xs text-gray-400 mb-2">Buchungsumsatz, anteilig auf die Aufenthaltstage verteilt (Accrual) — nicht der tatsächliche Zahlungseingang, siehe Cash Flow weiter unten</p>
+              <div ref={revChartRef}>
               <ResponsiveContainer width="100%" height={220}>
                 {revType === 'bar' ? (
                   <BarChart data={monthly} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
@@ -329,6 +373,7 @@ export default function DashboardPage() {
                   </LineChart>
                 )}
               </ResponsiveContainer>
+              </div>
             </div>
 
             {/* Occupancy */}
@@ -342,6 +387,7 @@ export default function DashboardPage() {
                     options={[{ value:'total', label:'Gesamt' }, { value:'house', label:'Je Haus' }]} />
                 </div>
               </div>
+              <div ref={occChartRef}>
               <ResponsiveContainer width="100%" height={220}>
                 {occType === 'bar' ? (
                   <BarChart data={monthly} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
@@ -380,6 +426,7 @@ export default function DashboardPage() {
                   </LineChart>
                 )}
               </ResponsiveContainer>
+              </div>
             </div>
           </div>
 
@@ -397,6 +444,7 @@ export default function DashboardPage() {
                   options={[{ value:'total', label:'Gesamt' }, { value:'house', label:'Je Haus' }]} />
               </div>
             </div>
+            <div ref={revparChartRef}>
             <ResponsiveContainer width="100%" height={220}>
               {revparType === 'bar' ? (
                 <BarChart data={monthly} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
@@ -443,6 +491,7 @@ export default function DashboardPage() {
                 </LineChart>
               )}
             </ResponsiveContainer>
+            </div>
             <div className="mt-2 flex gap-4 text-xs text-gray-400 flex-wrap">
               <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded" style={{background:'#f97316'}}></span> Vergangenheit</span>
               <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded border-2 border-orange-500" style={{background:'#fff'}}></span> Aktueller Monat</span>
@@ -454,26 +503,25 @@ export default function DashboardPage() {
           <div className="card">
             <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
               <div>
-                <h2 className="font-semibold text-gray-800">Cashflow — Umsatz nach Buchungsdatum</h2>
-                <p className="text-xs text-gray-400">Wann ist der Umsatz tatsächlich eingegangen (Buchungsdatum)</p>
+                <h2 className="font-semibold text-gray-800">Cash Flow — tatsächliche Zahlungseingänge</h2>
+                <p className="text-xs text-gray-400">Pro Rechnungsdatum (inkl. Teilrechnungen & Stornos) — nicht zu verwechseln mit dem Accrual-Umsatz oben</p>
               </div>
             </div>
             <div className="flex gap-6 mb-3 text-xs flex-wrap">
-              {cashflow.reduce((s, r) => s + r.revenue, 0) > 0 && (
+              {cashflow.reduce((s, r) => s + r.cashflow, 0) !== 0 && (
                 <span className="text-gray-500">
-                  Gesamt: <span className="font-semibold text-gray-800">{formatCurrency(cashflow.reduce((s, r) => s + r.revenue, 0))}</span>
-                  {' '}· <span className="text-gray-400">{cashflow.reduce((s, r) => s + r.bookings, 0)} Buchungen</span>
+                  Gesamt: <span className="font-semibold text-gray-800">{formatCurrency(cashflow.reduce((s, r) => s + r.cashflow, 0))}</span>
+                  {' '}· <span className="text-gray-400">{cashflow.reduce((s, r) => s + r.payments, 0)} Rechnungen</span>
                 </span>
               )}
-              <span className="text-gray-400 italic">Accrual-Umsatz (Aufenthalt) ist im Umsatz-Chart oben dargestellt</span>
             </div>
+            <div ref={cashflowChartRef}>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={cashflow} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="monthLabel" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
                 <Tooltip
-                  formatter={(v, name) => name === 'Buchungen' ? v : formatCurrency(v)}
                   labelStyle={{ fontWeight: 600 }}
                   content={({ active, payload, label }) => {
                     if (!active || !payload?.length) return null;
@@ -481,13 +529,13 @@ export default function DashboardPage() {
                     return (
                       <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-xs">
                         <div className="font-semibold text-gray-800 mb-1">{label}</div>
-                        <div className="text-emerald-700 font-bold">{formatCurrency(d?.revenue || 0)}</div>
-                        <div className="text-gray-500">{d?.bookings || 0} Buchungen eingegangen</div>
+                        <div className="text-emerald-700 font-bold">{formatCurrency(d?.cashflow || 0)}</div>
+                        <div className="text-gray-500">{d?.payments || 0} Rechnungen</div>
                       </div>
                     );
                   }}
                 />
-                <Bar dataKey="revenue" radius={[4,4,0,0]} name="Cashflow" fill="#059669">
+                <Bar dataKey="cashflow" radius={[4,4,0,0]} name="Cash Flow" fill="#059669">
                   {cashflow.map((m, i) => {
                     const ms = m.month?.slice(0,7);
                     return <Cell key={i} fill={ms > currentMonthStr ? '#a7f3d0' : ms < currentMonthStr ? '#10b981' : '#059669'} />;
@@ -495,6 +543,7 @@ export default function DashboardPage() {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+            </div>
             <div className="mt-2 flex gap-4 text-xs text-gray-400 flex-wrap">
               <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded" style={{background:'#10b981'}}></span> Vergangenheit</span>
               <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded border-2 border-emerald-700" style={{background:'#fff'}}></span> Aktueller Monat</span>

@@ -230,6 +230,10 @@ export default function ReportsPage() {
               <div className="grid lg:grid-cols-2 gap-6">
                 <div className="card">
                   <SectionHeader title="Umsatz & Cash Flow pro Monat (Klick für Buchungsdetails)" />
+                  <p className="text-xs text-gray-400 -mt-3 mb-3">
+                    <span className="font-medium text-blue-700">Umsatz</span> = Buchungsbetrag, anteilig auf die Aufenthaltstage verteilt (Accrual) ·{' '}
+                    <span className="font-medium text-amber-600">Cash Flow</span> = tatsächliche Zahlungseingänge nach Rechnungsdatum (inkl. Teilrechnungen/Stornos)
+                  </p>
                   <ResponsiveContainer width="100%" height={250}>
                     <ComposedChart data={monthlyData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
