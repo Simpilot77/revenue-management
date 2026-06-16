@@ -18,7 +18,7 @@ export default function LoginPage() {
     setError('')
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) {
-      setError(error.message)
+      setError(error.message || error.status?.toString() || 'Anmeldung fehlgeschlagen. Bitte prüfe E-Mail und Passwort.')
       setLoading(false)
     } else {
       router.push('/dashboard')
