@@ -94,15 +94,10 @@ function header(doc, title, subtitle = '', logoBase64 = null) {
   doc.setFillColor(...BLUE);
   doc.rect(0, 0, W, HEADER_H, 'F');
 
-  // Logo on the right side: white circle background + logo image
+  // Logo on the right side — rendered directly on the blue header without white background
   if (logoBase64) {
     try {
-      const cx = W - 14 - LOGO_SIZE / 2;
-      const cy = HEADER_H / 2;
-      // White circle behind logo
-      doc.setFillColor(255, 255, 255);
-      doc.circle(cx, cy, LOGO_SIZE / 2 + 1, 'F');
-      doc.addImage(logoBase64, 'JPEG', W - 14 - LOGO_SIZE, (HEADER_H - LOGO_SIZE) / 2, LOGO_SIZE, LOGO_SIZE);
+      doc.addImage(logoBase64, 'PNG', W - 14 - LOGO_SIZE, (HEADER_H - LOGO_SIZE) / 2, LOGO_SIZE, LOGO_SIZE);
     } catch (_) {}
   }
 

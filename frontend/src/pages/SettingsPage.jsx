@@ -252,6 +252,88 @@ export default function SettingsPage() {
     localStorage.setItem('extra_task_templates', JSON.stringify(updated));
   };
 
+  // ── Cleaning checklists per type ──────────────────────────────────────────
+  const CLEANING_TYPES = ['Reinigung', 'Endreinigung', 'Zwischenreinigung', 'Sonstiges'];
+  const DEFAULT_CLEANING_TASKS = [
+    'Bettwäsche wechseln',
+    'Küche reinigen',
+    'Staubsaugen',
+    'Wischen',
+    'Bäder reinigen',
+    'Schränke reinigen',
+    'Fenster putzen',
+    'Müll entsorgen',
+    'Handtücher wechseln',
+  ];
+  const [cleaningChecklists, setCleaningChecklists] = useState(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem('cleaning_checklists') || '{}');
+      const result = {};
+      CLEANING_TYPES.forEach(t => { result[t] = raw[t] || [...DEFAULT_CLEANING_TASKS]; });
+      return result;
+    } catch { return Object.fromEntries(CLEANING_TYPES.map(t => [t, [...DEFAULT_CLEANING_TASKS]])); }
+  });
+  const [activeCleaningType, setActiveCleaningType] = useState(CLEANING_TYPES[0]);
+  const [newCleaningTask, setNewCleaningTask] = useState('');
+
+  const saveCleaningChecklists = (updated) => {
+    setCleaningChecklists(updated);
+    localStorage.setItem('cleaning_checklists', JSON.stringify(updated));
+  };
+  const addCleaningTask = () => {
+    const text = newCleaningTask.trim();
+    if (!text) return;
+    const updated = { ...cleaningChecklists, [activeCleaningType]: [...(cleaningChecklists[activeCleaningType] || []), text] };
+    saveCleaningChecklists(updated);
+    setNewCleaningTask('');
+  };
+  const removeCleaningTask = (type, idx) => {
+    const updated = { ...cleaningChecklists, [type]: cleaningChecklists[type].filter((_, i) => i !== idx) };
+    saveCleaningChecklists(updated);
+  };
+  const toggleCleaningTaskEnabled = (type, idx) => {
+    const list = cleaningChecklists[type] || [];
+    const item = list[idx];
+    const updated = { ...cleaningChecklists, [type]: list.map((t, i) => i === idx ? (typeof t === 'object' ? t.text : t) : t) };
+    saveCleaningChecklists(updated);
+  };
+
+  // ── User management ────────────────────────────────────────────────────────
+  const PERMISSIONS = ['Buchungen', 'Rechnungen', 'Reinigung', 'Aufgaben', 'Einstellungen', 'Auswertungen'];
+  const [appUsers, setAppUsers] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('app_users') || '[]'); } catch { return []; }
+  });
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserRole, setNewUserRole] = useState('user');
+  const [editingUser, setEditingUser] = useState(null);
+
+  const saveUsers = (updated) => {
+    setAppUsers(updated);
+    localStorage.setItem('app_users', JSON.stringify(updated));
+  };
+  const addUser = () => {
+    const name = newUserName.trim();
+    if (!name) return;
+    const user = { id: Date.now().toString(), name, role: newUserRole, permissions: newUserRole === 'admin' ? [...PERMISSIONS] : ['Buchungen', 'Aufgaben', 'Reinigung'] };
+    saveUsers([...appUsers, user]);
+    setNewUserName('');
+    setNewUserRole('user');
+  };
+  const removeUser = (id) => saveUsers(appUsers.filter(u => u.id !== id));
+  const togglePermission = (userId, perm) => {
+    saveUsers(appUsers.map(u => {
+      if (u.id !== userId) return u;
+      const has = u.permissions.includes(perm);
+      return { ...u, permissions: has ? u.permissions.filter(p => p !== perm) : [...u.permissions, perm] };
+    }));
+  };
+  const updateUserRole = (userId, role) => {
+    saveUsers(appUsers.map(u => {
+      if (u.id !== userId) return u;
+      return { ...u, role, permissions: role === 'admin' ? [...PERMISSIONS] : u.permissions };
+    }));
+  };
+
   const set = (field, value) => setSettings(s => ({ ...s, [field]: value }));
   const setPresets = (type, list) =>
     setSettings(s => ({
@@ -468,7 +550,133 @@ export default function SettingsPage() {
         </div>
       </Section>
 
-      {/* 7. Häuser */}
+      {/* 7. Reinigungschecklisten */}
+      <Section title="🧹 Reinigungschecklisten">
+        <p className="text-sm text-slate-600">
+          Definiere die Unteraufgaben pro Reinigungstyp. Diese Vorlagen erscheinen im Reinigungsmanagement beim Erstellen eines neuen Eintrags.
+        </p>
+        <div className="flex gap-2 flex-wrap mb-3">
+          {CLEANING_TYPES.map(t => (
+            <button
+              key={t}
+              onClick={() => setActiveCleaningType(t)}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${activeCleaningType === t ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-300 hover:border-emerald-400'}`}
+            >{t}</button>
+          ))}
+        </div>
+        <div className="space-y-1.5 mb-3">
+          {(cleaningChecklists[activeCleaningType] || []).map((task, idx) => (
+            <div key={idx} className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-100 rounded-lg">
+              <span className="text-sm flex-1 text-slate-700">{task}</span>
+              <button
+                className="text-xs text-red-400 hover:text-red-600 px-2 py-0.5 rounded hover:bg-red-50"
+                onClick={() => removeCleaningTask(activeCleaningType, idx)}
+              >✕</button>
+            </div>
+          ))}
+          {(cleaningChecklists[activeCleaningType] || []).length === 0 && (
+            <p className="text-sm text-slate-400 italic">Keine Aufgaben – unten hinzufügen.</p>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <input
+            className="form-input flex-1"
+            placeholder="Neue Aufgabe hinzufügen …"
+            value={newCleaningTask}
+            onChange={e => setNewCleaningTask(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') addCleaningTask(); }}
+          />
+          <button className="btn-primary text-sm px-4" onClick={addCleaningTask} disabled={!newCleaningTask.trim()}>
+            + Hinzufügen
+          </button>
+        </div>
+      </Section>
+
+      {/* 8. Benutzerverwaltung */}
+      <Section title="👤 Benutzerverwaltung">
+        <p className="text-sm text-slate-600">
+          Lege Benutzer und deren Berechtigungen fest. Der Admin kann alle Bereiche bearbeiten. Benutzer können nur auf freigegebene Bereiche zugreifen.
+        </p>
+        <div className="space-y-3 mb-4">
+          {appUsers.length === 0 && (
+            <p className="text-sm text-slate-400 italic">Noch keine Benutzer angelegt.</p>
+          )}
+          {appUsers.map(user => (
+            <div key={user.id} className="border border-slate-200 rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm">
+                    {user.name.slice(0, 1).toUpperCase()}
+                  </div>
+                  <div>
+                    <div className="font-semibold text-slate-800 text-sm">{user.name}</div>
+                    <select
+                      className="text-xs text-slate-500 bg-transparent border-0 p-0 focus:ring-0 cursor-pointer"
+                      value={user.role}
+                      onChange={e => updateUserRole(user.id, e.target.value)}
+                    >
+                      <option value="admin">Admin</option>
+                      <option value="user">Benutzer</option>
+                    </select>
+                  </div>
+                </div>
+                <button
+                  className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50"
+                  onClick={() => removeUser(user.id)}
+                >✕ Entfernen</button>
+              </div>
+              {user.role !== 'admin' && (
+                <div>
+                  <div className="text-xs text-slate-400 mb-1.5 font-medium">Berechtigungen:</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {PERMISSIONS.map(perm => {
+                      const has = user.permissions.includes(perm);
+                      return (
+                        <button
+                          key={perm}
+                          onClick={() => togglePermission(user.id, perm)}
+                          className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-colors ${has ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-500 border-slate-300 hover:border-blue-400'}`}
+                        >{perm}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {user.role === 'admin' && (
+                <div className="text-xs text-emerald-600 font-medium">✅ Voller Zugriff auf alle Bereiche</div>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2 items-end">
+          <div className="flex-1">
+            <label className="form-label text-xs">Name</label>
+            <input
+              className="form-input w-full"
+              placeholder="z. B. Maria Müller"
+              value={newUserName}
+              onChange={e => setNewUserName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') addUser(); }}
+            />
+          </div>
+          <div>
+            <label className="form-label text-xs">Rolle</label>
+            <select
+              className="form-input"
+              value={newUserRole}
+              onChange={e => setNewUserRole(e.target.value)}
+            >
+              <option value="admin">Admin</option>
+              <option value="user">Benutzer</option>
+            </select>
+          </div>
+          <button className="btn-primary text-sm px-4 h-9" onClick={addUser} disabled={!newUserName.trim()}>
+            + Hinzufügen
+          </button>
+        </div>
+      </Section>
+
+      {/* 9. Häuser */}
       <Section title="🏠 Haus-Adressen">
         <p className="text-sm text-slate-600">
           Diese Adressen werden im Rechnungstext für das jeweils vermietete Haus verwendet.

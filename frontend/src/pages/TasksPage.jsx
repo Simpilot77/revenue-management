@@ -1269,6 +1269,48 @@ function ZuErledigenpanel({ bookings }) {
       </div>
 
       {/* Chronological list, grouped by booking */}
+      {/* ── Zusatzaufgaben (date-linked, not booking-linked) ── */}
+      {(() => {
+        try {
+          const raw = JSON.parse(localStorage.getItem('calendar_extra_tasks') || '{}');
+          const items = Object.entries(raw)
+            .map(([date, val]) => {
+              const t = typeof val === 'string' ? { text: val, assignee: '', done: false } : val;
+              return { date, ...t };
+            })
+            .filter(t => !t.done && t.date >= today)
+            .sort((a, b) => a.date.localeCompare(b.date));
+          if (!items.length) return null;
+          return (
+            <div className="card border-l-4 border-amber-400">
+              <div className="flex items-center gap-2 mb-3 pb-3 border-b border-gray-100">
+                <span className="text-base">🗑️</span>
+                <span className="font-semibold text-gray-800">Zusatzaufgaben (Kalender)</span>
+                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-amber-100 text-amber-700 ml-auto">{items.length} offen</span>
+              </div>
+              <div className="space-y-2">
+                {items.map(item => {
+                  const overdue = item.date < today;
+                  const isToday = item.date === today;
+                  return (
+                    <div key={item.date} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl ${overdue ? 'bg-red-50 border border-red-100' : isToday ? 'bg-amber-50 border border-amber-100' : 'bg-gray-50'}`}>
+                      <span className="text-base shrink-0">🗑️</span>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium text-gray-800">{item.text}</span>
+                        {item.assignee && <span className="text-xs text-gray-400 ml-2">({item.assignee})</span>}
+                      </div>
+                      <div className="text-xs text-gray-400 shrink-0">
+                        {new Date(item.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        } catch { return null; }
+      })()}
+
       {Object.values(byBooking).map(({ booking, items }) => {
         const isActive = booking.checkin_date?.slice(0, 10) <= today && booking.checkout_date?.slice(0, 10) >= today;
         const isFuture = booking.checkin_date?.slice(0, 10) > today;

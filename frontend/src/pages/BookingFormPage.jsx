@@ -34,6 +34,7 @@ const EMPTY_FORM = {
   currency: 'EUR',
   payment_method: 'ueberweisung',
   payment_status: 'offen',
+  payment_date: '',
   invoice_number: '',
   commission_amount: '',
   commission_overridden: false,
@@ -61,12 +62,13 @@ function Section({ title, children }) {
   );
 }
 
-function Field({ label, children, span = 1 }) {
+function Field({ label, children, span = 1, hint }) {
   const spanClass = span === 2 ? 'md:col-span-2' : span === 3 ? 'col-span-full' : '';
   return (
     <div className={spanClass}>
       <label className="form-label">{label}</label>
       {children}
+      {hint && <p className="text-xs text-gray-400 mt-0.5">{hint}</p>}
     </div>
   );
 }
@@ -733,6 +735,14 @@ export default function BookingFormPage() {
 
         {/* Payment */}
         <Section title="💳 Zahlung & Rechnung">
+          <Field label="Zahlungseingang (Datum)" hint="Leer lassen = Check-in-Datum wird für Cashflow verwendet">
+            <input
+              type="date"
+              className="form-input"
+              value={form.payment_date || ''}
+              onChange={e => set('payment_date', e.target.value)}
+            />
+          </Field>
           <Field label="Zahlungsart">
             <select className="form-select" value={form.payment_method} onChange={e => set('payment_method', e.target.value)}>
               <option value="ueberweisung">Überweisung</option>

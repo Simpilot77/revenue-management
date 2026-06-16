@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { formatCurrency, formatDateFull } from '../utils/format';
 import { emitDataChange, onDataChange } from '../utils/syncBus';
+import HouseStatusSection from '../components/HouseStatusSection';
 
 function getDaysInMonth(year, month) {
   return new Date(year, month + 1, 0).getDate();
@@ -62,6 +63,13 @@ function loadExtraTasks() {
 }
 function saveExtraTasksToStorage(m) { localStorage.setItem('calendar_extra_tasks', JSON.stringify(m)); }
 
+// Normalize legacy string entries to object form
+function parseExtraTask(val) {
+  if (!val) return null;
+  if (typeof val === 'string') return { text: val, assignee: '', done: false };
+  return { text: val.text || '', assignee: val.assignee || '', done: !!val.done };
+}
+
 function loadExtraTaskTemplates() {
   try { return JSON.parse(localStorage.getItem('extra_task_templates') || '[]'); } catch { return []; }
 }
@@ -91,9 +99,13 @@ export default function CalendarPage() {
   const [extraTaskTemplates, setExtraTaskTemplates] = useState(loadExtraTaskTemplates);
   const [extraTaskModal, setExtraTaskModal] = useState(null); // { date: ds }
   const [extraTaskInput, setExtraTaskInput] = useState('');
+  const [extraTaskAssignee, setExtraTaskAssignee] = useState('');
+  const [extraTaskDone, setExtraTaskDone] = useState(false);
   const [tasksVersion, setTasksVersion] = useState(0);
   const [tooltip, setTooltip] = useState(null); // { booking, x, y }
   const [readinessPopup, setReadinessPopup] = useState(null); // { booking, items, rect }
+  const [bookingActionPopup, setBookingActionPopup] = useState(null); // { booking, rect }
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // booking to delete
   const containerRef = useRef(null);
 
   const daysInMonth = getDaysInMonth(year, month);
@@ -240,18 +252,34 @@ export default function CalendarPage() {
 
   const openExtraTaskModal = (ds) => {
     setExtraTaskTemplates(loadExtraTaskTemplates());
-    setExtraTaskInput(extraTasks[ds] || '');
+    const existing = parseExtraTask(extraTasks[ds]);
+    setExtraTaskInput(existing?.text || '');
+    setExtraTaskAssignee(existing?.assignee || '');
+    setExtraTaskDone(existing?.done || false);
     setExtraTaskModal({ date: ds });
   };
 
   const saveExtraTask = (text) => {
     const updated = { ...extraTasks };
-    if (text.trim()) updated[extraTaskModal.date] = text.trim();
-    else delete updated[extraTaskModal.date];
+    if (text.trim()) {
+      updated[extraTaskModal.date] = { text: text.trim(), assignee: extraTaskAssignee.trim(), done: extraTaskDone };
+    } else {
+      delete updated[extraTaskModal.date];
+    }
     setExtraTasks(updated);
     saveExtraTasksToStorage(updated);
     setExtraTaskModal(null);
     setExtraTaskInput('');
+    setExtraTaskAssignee('');
+    setExtraTaskDone(false);
+  };
+
+  const deleteBooking = async (booking) => {
+    await api.delete(`bookings/${booking.id}`);
+    emitDataChange({ type: 'booking' });
+    setBookings(prev => prev.filter(b => b.id !== booking.id));
+    setDeleteConfirm(null);
+    setBookingActionPopup(null);
   };
 
   const VISIBLE = ['bestaetigt','eingecheckt','ausgecheckt','angefragt','gesperrt'];
@@ -294,6 +322,9 @@ export default function CalendarPage() {
           <button onClick={nextMonth} className="btn-secondary py-1.5 px-3 text-base">›</button>
         </div>
       </div>
+
+      {/* ── Hausstatus ── */}
+      <HouseStatusSection houses={houses} bookings={bookings} />
 
       {/* ── Calendar grid ── */}
       <div className="flex-1 overflow-auto px-6 py-4" ref={containerRef}>
@@ -454,7 +485,7 @@ export default function CalendarPage() {
                               setTooltip({ booking: b, rect });
                             }}
                             onMouseLeave={() => setTooltip(null)}
-                            onClick={(e) => { e.stopPropagation(); navigate(`/bookings/${b.id}/edit`); }}
+                            onClick={(e) => { e.stopPropagation(); const rect = e.currentTarget.getBoundingClientRect(); setBookingActionPopup({ booking: b, rect }); }}
                           >
                             {/* Check-in marker — traffic-light arrow: green = bereit, gelb = offene Punkte */}
                             {checkinTriangle && !isBlock && (() => {
@@ -564,7 +595,8 @@ export default function CalendarPage() {
                     const dow = new Date(year, month, d).getDay();
                     const isWe = dow === 0 || dow === 6;
                     const today = isToday(d);
-                    const task = extraTasks[ds];
+                    const rawTask = extraTasks[ds];
+                    const task = parseExtraTask(rawTask);
                     return (
                       <div
                         key={d}
@@ -572,20 +604,17 @@ export default function CalendarPage() {
                           width: DAY_COL_W, minWidth: DAY_COL_W, position: 'relative', flexShrink: 0,
                           ...(today ? { backgroundColor: 'rgba(168,85,247,0.16)', boxShadow: 'inset 0 0 0 1px rgba(168,85,247,0.5)' } : {}),
                         }}
-                        className={`border-r border-gray-100 cursor-pointer flex items-center justify-center
+                        className={`border-r border-gray-100 cursor-pointer flex flex-col items-center justify-center gap-0.5
                           ${today ? '' : isWe ? 'bg-gray-100/30' : ''}`}
-                        title={task ? `${task} – klicken zum Bearbeiten/Entfernen` : 'Klicken = Zusatzaufgabe eintragen'}
+                        title={task ? `${task.text}${task.assignee ? ' · ' + task.assignee : ''}${task.done ? ' ✅' : ''} – klicken zum Bearbeiten` : 'Klicken = Zusatzaufgabe eintragen'}
                         onClick={() => openExtraTaskModal(ds)}
                       >
                         {today && <div className="absolute top-0 bottom-0 left-0 w-1 bg-violet-500" />}
                         {task && (
-                          <span
-                            style={{ fontSize: '0.85rem' }}
-                            role="img"
-                            aria-label={task}
-                          >
-                            🗑️
-                          </span>
+                          <>
+                            <span style={{ fontSize: '0.85rem' }}>{task.done ? '✅' : '🗑️'}</span>
+                            {task.assignee && <span style={{ fontSize: '0.5rem', color: '#92400e', fontWeight: 600, lineHeight: 1.1, textAlign: 'center', maxWidth: DAY_COL_W - 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.assignee}</span>}
+                          </>
                         )}
                       </div>
                     );
@@ -750,6 +779,72 @@ export default function CalendarPage() {
       })()}
 
       {/* ── Cleaning Modal ── */}
+      {/* ── Booking action popup ── */}
+      {bookingActionPopup && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 999 }}
+          onClick={() => setBookingActionPopup(null)}
+        >
+          <div
+            style={{
+              position: 'fixed',
+              top: Math.min(bookingActionPopup.rect.bottom + 6, window.innerHeight - 140),
+              left: Math.min(bookingActionPopup.rect.left, window.innerWidth - 200),
+              zIndex: 1000,
+            }}
+            className="bg-white rounded-xl shadow-2xl border border-gray-200 py-2 min-w-[180px]"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-4 py-2 border-b border-gray-100">
+              <p className="text-xs font-semibold text-gray-700 truncate">{bookingActionPopup.booking.guest_name}</p>
+              <p className="text-xs text-gray-400">{bookingActionPopup.booking.house_name}</p>
+            </div>
+            <button
+              className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-2"
+              onClick={() => { navigate(`/bookings/${bookingActionPopup.booking.id}/edit`); setBookingActionPopup(null); }}
+            >
+              ✏️ <span>Buchung bearbeiten</span>
+            </button>
+            <button
+              className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+              onClick={() => { setDeleteConfirm(bookingActionPopup.booking); setBookingActionPopup(null); }}
+            >
+              🗑️ <span>Buchung löschen</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete confirmation ── */}
+      {deleteConfirm && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}
+          onClick={() => setDeleteConfirm(null)}
+        >
+          <div className="card" style={{ minWidth: 340, maxWidth: 420, padding: 24 }} onClick={e => e.stopPropagation()}>
+            <h3 className="text-base font-semibold text-gray-900 mb-1">🗑️ Buchung löschen?</h3>
+            <p className="text-sm text-gray-600 mb-1">
+              <strong>{deleteConfirm.guest_name}</strong> · {deleteConfirm.house_name}
+            </p>
+            <p className="text-sm text-gray-400 mb-5">
+              {deleteConfirm.checkin_date?.slice(0,10)} → {deleteConfirm.checkout_date?.slice(0,10)}
+            </p>
+            <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 mb-5">
+              ⚠️ Diese Aktion kann nicht rückgängig gemacht werden.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button className="btn-secondary text-sm" onClick={() => setDeleteConfirm(null)}>Abbrechen</button>
+              <button
+                className="btn-primary text-sm bg-red-600 border-red-600 hover:bg-red-700"
+                onClick={() => deleteBooking(deleteConfirm)}
+              >
+                Ja, endgültig löschen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Zusatzaufgaben modal ── */}
       {extraTaskModal && (
         <div
@@ -789,17 +884,35 @@ export default function CalendarPage() {
             )}
 
             {/* Manual input */}
-            <div className="mb-5">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Manuelle Eingabe</p>
+            <div className="mb-3">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Aufgabe</p>
               <input
                 className="form-input w-full"
                 placeholder="z. B. Müllabfuhr, Gartenpflege …"
                 value={extraTaskInput}
                 onChange={e => setExtraTaskInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') saveExtraTask(extraTaskInput); if (e.key === 'Escape') setExtraTaskModal(null); }}
+                onKeyDown={e => { if (e.key === 'Escape') setExtraTaskModal(null); }}
                 autoFocus
               />
             </div>
+            <div className="mb-3">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Zuständig</p>
+              <input
+                className="form-input w-full"
+                placeholder="z. B. Jan, Nils …"
+                value={extraTaskAssignee}
+                onChange={e => setExtraTaskAssignee(e.target.value)}
+              />
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer mb-5">
+              <input
+                type="checkbox"
+                className="w-4 h-4 rounded accent-green-600"
+                checked={extraTaskDone}
+                onChange={e => setExtraTaskDone(e.target.checked)}
+              />
+              <span className="text-sm text-gray-700">Aufgabe erledigt</span>
+            </label>
 
             <div className="flex justify-between items-center gap-2">
               {extraTasks[extraTaskModal.date] && (

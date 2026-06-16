@@ -910,18 +910,14 @@ export function calcCashflow(from, to, houseId) {
     if (hid && b.house_id !== hid) return false;
     return true;
   }).forEach(b => {
-    const entries = (b.invoices && b.invoices.length)
-      ? b.invoices
-      : (b.invoice_number ? [{ invoice_date: null, brutto_total: b.total_price }] : []);
-    entries.forEach(inv => {
-      const m = (inv.invoice_date || b.checkin_date || b.booking_date || '').slice(0, 7);
-      if (!m) return;
-      if (fromMonth && m < fromMonth) return;
-      if (toMonth   && m > toMonth)   return;
-      ensureMonth(m);
-      byMonth[m].cashflow += parseFloat(inv.brutto_total) || 0;
-      byMonth[m].payments++;
-    });
+    // Cash arrives on manually recorded payment_date, or on check-in day if not set
+    const m = (b.payment_date || b.checkin_date || '').slice(0, 7);
+    if (!m) return;
+    if (fromMonth && m < fromMonth) return;
+    if (toMonth   && m > toMonth)   return;
+    ensureMonth(m);
+    byMonth[m].cashflow += parseFloat(b.total_price) || 0;
+    byMonth[m].payments++;
   });
   return Object.values(byMonth).sort((a, b) => a.month.localeCompare(b.month)).map(r => ({
     ...r,
