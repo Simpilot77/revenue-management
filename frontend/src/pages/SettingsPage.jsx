@@ -232,6 +232,26 @@ export default function SettingsPage() {
   const [importStatus, setImportStatus] = useState(null); // { type: 'success'|'error', msg }
   const importRef = useRef(null);
 
+  const [extraTaskTemplates, setExtraTaskTemplates] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('extra_task_templates') || '[]'); } catch { return []; }
+  });
+  const [newTaskTemplate, setNewTaskTemplate] = useState('');
+
+  const addTaskTemplate = () => {
+    const text = newTaskTemplate.trim();
+    if (!text || extraTaskTemplates.includes(text)) return;
+    const updated = [...extraTaskTemplates, text];
+    setExtraTaskTemplates(updated);
+    localStorage.setItem('extra_task_templates', JSON.stringify(updated));
+    setNewTaskTemplate('');
+  };
+
+  const removeTaskTemplate = (i) => {
+    const updated = extraTaskTemplates.filter((_, idx) => idx !== i);
+    setExtraTaskTemplates(updated);
+    localStorage.setItem('extra_task_templates', JSON.stringify(updated));
+  };
+
   const set = (field, value) => setSettings(s => ({ ...s, [field]: value }));
   const setPresets = (type, list) =>
     setSettings(s => ({
@@ -415,7 +435,40 @@ export default function SettingsPage() {
         </Field>
       </Section>
 
-      {/* 6. Häuser */}
+      {/* 6. Zusatzaufgaben-Vorlagen */}
+      <Section title="🗑️ Zusatzaufgaben-Vorlagen (Kalender)">
+        <p className="text-sm text-slate-600">
+          Diese Vorlagen erscheinen im Kalender als Schnellauswahl, wenn du auf eine Zelle in der Zeile „Zusatzaufgaben" klickst.
+        </p>
+        <div className="space-y-2">
+          {extraTaskTemplates.map((tpl, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="flex-1 text-sm bg-amber-50 border border-amber-200 text-amber-800 rounded-full px-3 py-1">{tpl}</span>
+              <button
+                className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50"
+                onClick={() => removeTaskTemplate(i)}
+              >✕ Entfernen</button>
+            </div>
+          ))}
+          {extraTaskTemplates.length === 0 && (
+            <p className="text-sm text-slate-400 italic">Noch keine Vorlagen – unten hinzufügen.</p>
+          )}
+        </div>
+        <div className="flex gap-2 mt-3">
+          <input
+            className="form-input flex-1"
+            placeholder="z. B. Müllabfuhr, Gartenpflege, Fensterreinigung …"
+            value={newTaskTemplate}
+            onChange={e => setNewTaskTemplate(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') addTaskTemplate(); }}
+          />
+          <button className="btn-primary text-sm px-4" onClick={addTaskTemplate} disabled={!newTaskTemplate.trim()}>
+            + Hinzufügen
+          </button>
+        </div>
+      </Section>
+
+      {/* 7. Häuser */}
       <Section title="🏠 Haus-Adressen">
         <p className="text-sm text-slate-600">
           Diese Adressen werden im Rechnungstext für das jeweils vermietete Haus verwendet.

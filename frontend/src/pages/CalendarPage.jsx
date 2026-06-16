@@ -62,6 +62,10 @@ function loadExtraTasks() {
 }
 function saveExtraTasksToStorage(m) { localStorage.setItem('calendar_extra_tasks', JSON.stringify(m)); }
 
+function loadExtraTaskTemplates() {
+  try { return JSON.parse(localStorage.getItem('extra_task_templates') || '[]'); } catch { return []; }
+}
+
 const DEFAULT_CLEANING_DETAILS = { scope: 'reinigung', windows: false, deadlineTime: '', durationMin: '', cost: '', notes: '', cleanerConfirmed: false };
 const CLEANING_SCOPE_LABELS = { grund: 'Grundreinigung', reinigung: 'Zwischenreinigung', bettwaesche: 'Bettwäsche-Wechsel' };
 
@@ -84,6 +88,9 @@ export default function CalendarPage() {
   const [cleaningDetailsMap, setCleaningDetailsMap] = useState(loadCleaningDetails);
   const [cleaningForm, setCleaningForm] = useState(DEFAULT_CLEANING_DETAILS);
   const [extraTasks, setExtraTasks] = useState(loadExtraTasks);
+  const [extraTaskTemplates, setExtraTaskTemplates] = useState(loadExtraTaskTemplates);
+  const [extraTaskModal, setExtraTaskModal] = useState(null); // { date: ds }
+  const [extraTaskInput, setExtraTaskInput] = useState('');
   const [tasksVersion, setTasksVersion] = useState(0);
   const [tooltip, setTooltip] = useState(null); // { booking, x, y }
   const [readinessPopup, setReadinessPopup] = useState(null); // { booking, items, rect }
@@ -231,15 +238,20 @@ export default function CalendarPage() {
     setCleaningModal(args);
   };
 
-  const editExtraTask = (ds) => {
-    const current = extraTasks[ds] || '';
-    const input = window.prompt(`Zusatzaufgabe für ${fmtDateShort(ds)} (z. B. Müllabfuhr):`, current);
-    if (input === null) return;
-    const text = input.trim();
+  const openExtraTaskModal = (ds) => {
+    setExtraTaskTemplates(loadExtraTaskTemplates());
+    setExtraTaskInput(extraTasks[ds] || '');
+    setExtraTaskModal({ date: ds });
+  };
+
+  const saveExtraTask = (text) => {
     const updated = { ...extraTasks };
-    if (text) updated[ds] = text; else delete updated[ds];
+    if (text.trim()) updated[extraTaskModal.date] = text.trim();
+    else delete updated[extraTaskModal.date];
     setExtraTasks(updated);
     saveExtraTasksToStorage(updated);
+    setExtraTaskModal(null);
+    setExtraTaskInput('');
   };
 
   const VISIBLE = ['bestaetigt','eingecheckt','ausgecheckt','angefragt','gesperrt'];
@@ -563,7 +575,7 @@ export default function CalendarPage() {
                         className={`border-r border-gray-100 cursor-pointer flex items-center justify-center
                           ${today ? '' : isWe ? 'bg-gray-100/30' : ''}`}
                         title={task ? `${task} – klicken zum Bearbeiten/Entfernen` : 'Klicken = Zusatzaufgabe eintragen'}
-                        onClick={() => editExtraTask(ds)}
+                        onClick={() => openExtraTaskModal(ds)}
                       >
                         {today && <div className="absolute top-0 bottom-0 left-0 w-1 bg-violet-500" />}
                         {task && (
@@ -738,6 +750,81 @@ export default function CalendarPage() {
       })()}
 
       {/* ── Cleaning Modal ── */}
+      {/* ── Zusatzaufgaben modal ── */}
+      {extraTaskModal && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}
+          onClick={() => setExtraTaskModal(null)}
+        >
+          <div className="card" style={{ minWidth: 340, maxWidth: 460, padding: 24 }} onClick={e => e.stopPropagation()}>
+            <h3 className="text-base font-semibold text-gray-900 mb-1">🗑️ Zusatzaufgabe – {fmtDateShort(extraTaskModal.date)}</h3>
+            <p className="text-xs text-gray-400 mb-4">{extraTaskModal.date}</p>
+
+            {/* Predefined templates */}
+            {extraTaskTemplates.length > 0 && (
+              <div className="mb-4">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Vorlagen</p>
+                <div className="flex flex-wrap gap-2">
+                  {extraTaskTemplates.map((tpl, i) => (
+                    <button
+                      key={i}
+                      className={`px-3 py-1.5 text-sm rounded-full border transition-colors
+                        ${extraTaskInput === tpl
+                          ? 'bg-amber-500 text-white border-amber-500'
+                          : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'}`}
+                      onClick={() => setExtraTaskInput(tpl)}
+                    >
+                      {tpl}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {extraTaskTemplates.length === 0 && (
+              <p className="text-xs text-gray-400 mb-4 italic">
+                Noch keine Vorlagen definiert –{' '}
+                <a href="#/settings" className="text-blue-500 underline" onClick={() => setExtraTaskModal(null)}>in den Einstellungen</a> anlegen.
+              </p>
+            )}
+
+            {/* Manual input */}
+            <div className="mb-5">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Manuelle Eingabe</p>
+              <input
+                className="form-input w-full"
+                placeholder="z. B. Müllabfuhr, Gartenpflege …"
+                value={extraTaskInput}
+                onChange={e => setExtraTaskInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') saveExtraTask(extraTaskInput); if (e.key === 'Escape') setExtraTaskModal(null); }}
+                autoFocus
+              />
+            </div>
+
+            <div className="flex justify-between items-center gap-2">
+              {extraTasks[extraTaskModal.date] && (
+                <button
+                  className="text-xs text-red-500 hover:text-red-700 underline"
+                  onClick={() => saveExtraTask('')}
+                >
+                  Aufgabe entfernen
+                </button>
+              )}
+              <div className="flex gap-2 ml-auto">
+                <button className="btn-secondary text-sm" onClick={() => setExtraTaskModal(null)}>Abbrechen</button>
+                <button
+                  className="btn-primary text-sm"
+                  disabled={!extraTaskInput.trim()}
+                  onClick={() => saveExtraTask(extraTaskInput)}
+                >
+                  Speichern
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {cleaningModal && (
         <div
           style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}
