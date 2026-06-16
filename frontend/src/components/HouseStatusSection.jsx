@@ -244,6 +244,15 @@ function HouseStatusCard({ house, bookings }) {
                     : <span className="text-xs font-medium rounded-full px-2 py-0.5 bg-red-100 text-red-600">⚠ Noch organisieren</span>
                 }
               </Row>
+              {nextBooking && (
+                <Row label="Folgebuchung">
+                  <span className="text-xs text-blue-700 font-medium">{nextBooking.guest_name}</span>
+                  <span className="text-xs text-gray-400 ml-1">· {fmtDate(nextBooking.checkin_date)}</span>
+                  {daysUntilNext !== null && (
+                    <span className="text-xs text-blue-400 ml-1">(in {daysUntilNext}d)</span>
+                  )}
+                </Row>
+              )}
             </>
           ) : (
             <>

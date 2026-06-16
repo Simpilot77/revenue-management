@@ -24,6 +24,8 @@ const STATUS_META = {
   angefragt:   { bg: '#d97706', light: '#fef3c7', text: '#78350f', label: 'Angefragt'   },
   bestaetigt:  { bg: '#2563eb', light: '#dbeafe', text: '#1e3a8a', label: 'Bestätigt'   },
   gesperrt:    { bg: '#475569', light: '#f1f5f9', text: '#1e293b', label: 'Gesperrt'    },
+  no_show:     { bg: '#ea580c', light: '#fff7ed', text: '#7c2d12', label: 'No-Show'     },
+  storniert:   { bg: '#d1d5db', light: '#f9fafb', text: '#9ca3af', label: 'Storniert'   },
 };
 const getColor = (status) => (STATUS_META[status] || STATUS_META.bestaetigt).bg;
 
@@ -209,6 +211,27 @@ export default function CalendarPage() {
     saveCleaningExclusionsToStorage(updated);
     setTasksVersion(v => v + 1);
     emitDataChange({ type: 'cleaning' });
+  };
+
+  // Quick-mark a cleaning as done without opening the full modal (right-click / double-click)
+  const quickMarkCleaningDone = (e, houseId, ds, cs) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!cs) return;
+    if (cs.status === 'done') return;
+    if (cs.bookingId) {
+      setBookingCleaningFlags(cs.bookingId, { org: true, done: true });
+    } else {
+      // Manual marker — store in cleaning_details
+      const key = `${houseId}_${ds}`;
+      try {
+        const details = JSON.parse(localStorage.getItem('cleaning_details') || '{}');
+        details[key] = { ...(details[key] || {}), done: true };
+        localStorage.setItem('cleaning_details', JSON.stringify(details));
+      } catch {}
+      setTasksVersion(v => v + 1);
+      emitDataChange({ type: 'cleaning' });
+    }
   };
 
   // Sets the cleaning_org/cleaning_done flags on a booking's task entry
@@ -428,11 +451,12 @@ export default function CalendarPage() {
                                   border: `1.5px solid ${cs.status === 'done' ? '#22c55e' : cs.status === 'organized' ? '#f59e0b' : '#ef4444'}`,
                                   boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
                                 }}
-                                title={`🧹 Reinigung (${cs.status}) – klicken`}
+                                title={cs.status !== 'done' ? `🧹 Reinigung (${cs.status}) – klicken: Details, Rechtsklick: sofort erledigt` : `🧹 Reinigung erledigt – klicken: Details`}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   openCleaningModal({ houseId: house.id, houseName: house.name, date: ds, alreadySet: true, status: cs.status, bookingId: cs.bookingId, excludedBookingId: null });
                                 }}
+                                onContextMenu={(e) => quickMarkCleaningDone(e, house.id, ds, cs)}
                               >
                                 🧹
                               </div>
@@ -457,6 +481,9 @@ export default function CalendarPage() {
                         const checkoutTriangle = !clippedRight;
 
                         const isBlock = b.status === 'gesperrt';
+                        const today = new Date().toISOString().slice(0, 10);
+                        const isPast = b.checkout_date?.slice(0, 10) < today;
+                        const isCancelled = b.status === 'storniert';
 
                         return (
                           <div
@@ -472,6 +499,7 @@ export default function CalendarPage() {
                               cursor: 'pointer',
                               zIndex: 5,
                               overflow: 'hidden',
+                              opacity: isCancelled ? 0.3 : isPast ? 0.55 : 1,
                               boxShadow: isDupe ? `0 0 0 2px #f97316, 0 1px 3px rgba(0,0,0,0.18)` : '0 1px 2px rgba(0,0,0,0.15)',
                               display: 'flex',
                               alignItems: 'center',
@@ -633,6 +661,7 @@ export default function CalendarPage() {
               {m.label}
             </span>
           ))}
+          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm inline-block bg-gray-200 opacity-50 border border-gray-300" />Vergangenheit (ausgeblendet)</span>
           <span className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-sm inline-block bg-red-200 border border-red-400" />
             🧹 Reinigung geplant
@@ -853,7 +882,12 @@ export default function CalendarPage() {
         >
           <div className="card" style={{ minWidth: 340, maxWidth: 460, padding: 24 }} onClick={e => e.stopPropagation()}>
             <h3 className="text-base font-semibold text-gray-900 mb-1">🗑️ Zusatzaufgabe – {fmtDateShort(extraTaskModal.date)}</h3>
-            <p className="text-xs text-gray-400 mb-4">{extraTaskModal.date}</p>
+            <p className="text-xs text-gray-400 mb-2">{extraTaskModal.date}</p>
+            {extraTaskModal.date < new Date().toISOString().slice(0, 10) && (
+              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+                ⚠️ Dieses Datum liegt in der Vergangenheit.
+              </div>
+            )}
 
             {/* Predefined templates */}
             {extraTaskTemplates.length > 0 && (

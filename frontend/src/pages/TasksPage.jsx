@@ -1116,6 +1116,7 @@ function BookingTaskCard({ booking, onTaskChange, highlight }) {
 function ZuErledigenpanel({ bookings }) {
   const today = new Date().toISOString().slice(0, 10);
   const [, rerender] = useState(0);
+  const [sortOrder, setSortOrder] = useState('due'); // 'due' | 'checkin' | 'booking_date'
 
   // Build flat list of all pending tasks with their due dates
   const pendingItems = [];
@@ -1265,7 +1266,13 @@ function ZuErledigenpanel({ bookings }) {
           <span className="font-bold text-blue-600">{pendingItems.length}</span>
           <span className="text-blue-500">Aufgaben gesamt offen</span>
         </div>
-        <button className="btn-secondary text-sm ml-auto" onClick={handleExport}>📄 Arbeitsplan exportieren</button>
+        <div className="flex items-center gap-1 ml-auto">
+          {[['due','Nach Fälligkeit'],['checkin','Nach Check-in'],['booking_date','Nach Buchungsdatum']].map(([v,l]) => (
+            <button key={v} onClick={() => setSortOrder(v)}
+              className={`text-xs px-2.5 py-1 rounded-md border font-medium transition-colors ${sortOrder === v ? 'bg-blue-700 text-white border-blue-700' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}>{l}</button>
+          ))}
+        </div>
+        <button className="btn-secondary text-sm" onClick={handleExport}>📄 Arbeitsplan exportieren</button>
       </div>
 
       {/* Chronological list, grouped by booking */}
@@ -1311,7 +1318,14 @@ function ZuErledigenpanel({ bookings }) {
         } catch { return null; }
       })()}
 
-      {Object.values(byBooking).map(({ booking, items }) => {
+      {Object.values(byBooking).sort((a, b) => {
+        if (sortOrder === 'checkin') return (a.booking.checkin_date || '').localeCompare(b.booking.checkin_date || '');
+        if (sortOrder === 'booking_date') return (a.booking.booking_date || '').localeCompare(b.booking.booking_date || '');
+        // 'due': sort by earliest due date in the group
+        const aMin = a.items.map(i => i.dueDate).filter(Boolean).sort()[0] || '';
+        const bMin = b.items.map(i => i.dueDate).filter(Boolean).sort()[0] || '';
+        return aMin.localeCompare(bMin);
+      }).map(({ booking, items }) => {
         const isActive = booking.checkin_date?.slice(0, 10) <= today && booking.checkout_date?.slice(0, 10) >= today;
         const isFuture = booking.checkin_date?.slice(0, 10) > today;
         const statusCls = isActive ? 'bg-blue-100 text-blue-700' : isFuture ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500';

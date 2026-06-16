@@ -648,7 +648,25 @@ export default function BookingFormPage() {
           </Field>
           <Field label=" ">
             <label className="flex items-center gap-2 mt-6 cursor-pointer">
-              <input type="checkbox" className="rounded" checked={form.is_returning_guest} onChange={e => set('is_returning_guest', e.target.checked)} />
+              <input type="checkbox" className="rounded" checked={form.is_returning_guest} onChange={e => {
+                const val = e.target.checked;
+                set('is_returning_guest', val);
+                if (val) {
+                  // Auto-mark other bookings from the same guest
+                  api.get('/bookings', { params: { limit: 500 } }).then(r => {
+                    const others = (r.data.data || []).filter(b =>
+                      b.id !== form.id && !b.is_returning_guest && (
+                        (form.guest_name && b.guest_name?.toLowerCase().trim() === form.guest_name.toLowerCase().trim()) ||
+                        (form.guest_email && b.guest_email && b.guest_email.toLowerCase() === form.guest_email.toLowerCase()) ||
+                        (form.company_name && b.company_name && b.company_name.toLowerCase().trim() === form.company_name.toLowerCase().trim())
+                      )
+                    );
+                    if (others.length > 0 && window.confirm(`${others.length} weitere Buchung(en) des gleichen Gastes gefunden. Auch als Stammgast markieren?`)) {
+                      others.forEach(b => api.put(`/bookings/${b.id}`, { ...b, is_returning_guest: true }));
+                    }
+                  });
+                }
+              }} />
               <span className="text-sm text-gray-700">⭐ Stammgast / Wiederholungsbuchung</span>
             </label>
           </Field>

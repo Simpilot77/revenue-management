@@ -229,10 +229,10 @@ export default function ReportsPage() {
             <div className="space-y-6">
               <div className="grid lg:grid-cols-2 gap-6">
                 <div className="card">
-                  <SectionHeader title="Umsatz & Cash Flow pro Monat (Klick für Buchungsdetails)" />
+                  <SectionHeader title="Umsatz & Einnahme-Cashflow pro Monat (Klick für Buchungsdetails)" />
                   <p className="text-xs text-gray-400 -mt-3 mb-3">
                     <span className="font-medium text-blue-700">Umsatz</span> = Buchungsbetrag, anteilig auf die Aufenthaltstage verteilt (Accrual) ·{' '}
-                    <span className="font-medium text-amber-600">Cash Flow</span> = tatsächliche Zahlungseingänge nach Rechnungsdatum (inkl. Teilrechnungen/Stornos)
+                    <span className="font-medium text-amber-600">Einnahme-Cashflow</span> = Zahlungseingänge nach Check-in-Datum (kein echter Cashflow)
                   </p>
                   <ResponsiveContainer width="100%" height={250}>
                     <ComposedChart data={monthlyData}>
@@ -241,8 +241,12 @@ export default function ReportsPage() {
                       <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
                       <Tooltip formatter={v => formatCurrency(v)} />
                       <Legend />
-                      <Bar dataKey="revenue" fill="#1d4ed8" radius={[4,4,0,0]} name="Umsatz" cursor="pointer" onClick={(d) => d.booking_ids?.length && setDrillDown({ title: `Buchungen ${d.monthLabel} ${year}`, ids: d.booking_ids })} />
-                      <Line type="monotone" dataKey="cashflow" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} name="Cash Flow" />
+                      <Bar dataKey="revenue" radius={[4,4,0,0]} name="Umsatz" cursor="pointer" onClick={(d) => d.booking_ids?.length && setDrillDown({ title: `Buchungen ${d.monthLabel} ${year}`, ids: d.booking_ids })}>
+                        {monthlyData.map((r, i) => (
+                          <Cell key={i} fill={r.revenue >= 10000 ? '#16a34a' : r.revenue >= 8000 ? '#f59e0b' : '#ef4444'} />
+                        ))}
+                      </Bar>
+                      <Line type="monotone" dataKey="cashflow" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} name="Einnahme-Cashflow" />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
@@ -255,7 +259,11 @@ export default function ReportsPage() {
                       <YAxis yAxisId="left" tick={{ fontSize: 11 }} tickFormatter={v => `${v}%`} />
                       <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} tickFormatter={v => `${v}€`} />
                       <Tooltip formatter={(v, name) => name === 'Auslastung' ? `${v} %` : formatCurrency(v)} />
-                      <Bar yAxisId="left" dataKey="occupancy_rate" fill="#10b981" radius={[4,4,0,0]} name="Auslastung" />
+                      <Bar yAxisId="left" dataKey="occupancy_rate" radius={[4,4,0,0]} name="Auslastung">
+                        {monthlyData.map((r, i) => (
+                          <Cell key={i} fill={r.occupancy_rate >= 70 ? '#16a34a' : r.occupancy_rate >= 50 ? '#f59e0b' : '#ef4444'} />
+                        ))}
+                      </Bar>
                       <Bar yAxisId="right" dataKey="adr" fill="#8b5cf6" radius={[4,4,0,0]} name="ADR" />
                     </BarChart>
                   </ResponsiveContainer>
@@ -277,7 +285,7 @@ export default function ReportsPage() {
                           Frei {h.short}
                         </th>
                       ))}
-                      {['Umsatz','Cash Flow','ADR','RevPAR'].map(h => (
+                      {['Umsatz','Einnahme-Cashflow','ADR','RevPAR'].map(h => (
                         <th key={h} className="text-left text-gray-500 font-medium px-4 py-3">{h}</th>
                       ))}
                     </tr>

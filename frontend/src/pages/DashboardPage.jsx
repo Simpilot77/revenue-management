@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import html2canvas from 'html2canvas';
 import {
@@ -92,7 +92,7 @@ function DrillDownModal({ title, bookingIds, onClose }) {
   );
 }
 
-function KpiCard({ label, value, sub, color = 'blue', icon }) {
+function KpiCard({ label, value, sub, color = 'blue', icon, onClick }) {
   const colors = {
     blue: 'text-blue-700 bg-blue-50',
     green: 'text-green-700 bg-green-50',
@@ -101,18 +101,57 @@ function KpiCard({ label, value, sub, color = 'blue', icon }) {
     red: 'text-red-700 bg-red-50',
   };
   return (
-    <div className="kpi-card">
+    <div className={`kpi-card ${onClick ? 'cursor-pointer hover:ring-2 hover:ring-blue-300 transition-shadow' : ''}`} onClick={onClick}>
       <div className="flex items-start justify-between">
         <span className="text-sm text-gray-500">{label}</span>
         <span className={`text-lg p-1.5 rounded-lg ${colors[color]}`}>{icon}</span>
       </div>
       <div className="text-2xl font-bold text-gray-900 mt-1">{value}</div>
-      {sub && <div className="text-xs text-gray-400">{sub}</div>}
+      {sub && <div className="text-xs text-gray-400">{sub}{onClick && <span className="ml-1 text-blue-400">→ Details</span>}</div>}
+    </div>
+  );
+}
+
+function BookingListModal({ title, bookings, onClose, navigate }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <h2 className="text-lg font-bold text-gray-900">{title} <span className="text-gray-400 font-normal text-base">({bookings.length})</span></h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-2xl font-bold leading-none">×</button>
+        </div>
+        <div className="overflow-auto flex-1">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b sticky top-0">
+              <tr>{['Haus','Gast','Check-in','Check-out','Nächte','Gesamtpreis','Status'].map(h => (
+                <th key={h} className="text-left text-gray-500 font-medium px-4 py-2 whitespace-nowrap">{h}</th>
+              ))}</tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {bookings.map(b => (
+                <tr key={b.id} className="hover:bg-blue-50 cursor-pointer" onClick={() => { onClose(); navigate(`/bookings/${b.id}/edit`); }}>
+                  <td className="px-4 py-2 font-medium">{b.house_short || b.house_name}</td>
+                  <td className="px-4 py-2">
+                    <div>{b.guest_name}</div>
+                    {b.company_name && <div className="text-xs text-gray-400">{b.company_name}</div>}
+                  </td>
+                  <td className="px-4 py-2 whitespace-nowrap">{b.checkin_date?.slice(0,10)}</td>
+                  <td className="px-4 py-2 whitespace-nowrap">{b.checkout_date?.slice(0,10)}</td>
+                  <td className="px-4 py-2 text-center">{b.nights}</td>
+                  <td className="px-4 py-2 font-medium">{b.total_price ? `${parseFloat(b.total_price).toFixed(2)} €` : '—'}</td>
+                  <td className="px-4 py-2"><span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{b.status}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
 
 export default function DashboardPage() {
+  const navigate = useNavigate();
   const [kpis, setKpis]         = useState(null);
   const [monthly, setMonthly]   = useState([]);
   const [cashflow, setCashflow]  = useState([]);
@@ -121,6 +160,7 @@ export default function DashboardPage() {
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState(null);
   const [drillDown, setDrillDown] = useState(null);
+  const [listModal, setListModal] = useState(null); // { title, bookings }
   const [exporting, setExporting] = useState(false);
 
   // Refs for PDF chart capture
@@ -258,6 +298,7 @@ export default function DashboardPage() {
   return (
     <div className="p-6 space-y-6">
       {drillDown && <DrillDownModal title={drillDown.title} bookingIds={drillDown.ids} onClose={() => setDrillDown(null)} />}
+      {listModal && <BookingListModal title={listModal.title} bookings={listModal.bookings} onClose={() => setListModal(null)} navigate={navigate} />}
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -311,8 +352,10 @@ export default function DashboardPage() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <KpiCard label="Ø Aufenthalt" value={`${kpis.avg_los} Nächte`} sub="Länge des Aufenthalts" color="blue" icon="🌙" />
             <KpiCard label="Ø Vorlaufzeit" value={`${kpis.avg_lead_time} Tage`} sub="Buchung bis Check-in" color="purple" icon="⏱️" />
-            <KpiCard label="Stornoquote" value={formatPercent(kpis.cancellation_rate)} sub={`${kpis.cancellations} Stornos`} color="red" icon="❌" />
-            <KpiCard label="Stammgäste" value={kpis.returning_guests} sub="Wiederholungsbuchungen" color="green" icon="⭐" />
+            <KpiCard label="Stornoquote" value={formatPercent(kpis.cancellation_rate)} sub={`${kpis.cancellations} Stornos`} color="red" icon="❌"
+              onClick={() => api.get('/bookings', { params: { from, to, limit: 500 } }).then(r => setListModal({ title: 'Stornierte Buchungen', bookings: (r.data.data || []).filter(b => b.status === 'storniert') }))} />
+            <KpiCard label="Stammgäste" value={kpis.returning_guests} sub="Wiederholungsbuchungen" color="green" icon="⭐"
+              onClick={() => api.get('/bookings', { params: { from, to, limit: 500 } }).then(r => setListModal({ title: 'Stammgäste', bookings: (r.data.data || []).filter(b => b.is_returning_guest) }))} />
           </div>
 
           {/* ── Revenue & Occupancy charts with toggles ── */}
@@ -342,9 +385,11 @@ export default function DashboardPage() {
                     {revBreak === 'total'
                       ? <Bar dataKey="revenue" radius={[4,4,0,0]} name="Umsatz" cursor="pointer"
                           onClick={d => d.booking_ids?.length && setDrillDown({ title: `Buchungen ${d.monthLabel}`, ids: d.booking_ids })}>
-                          {monthly.map((m, i) => (
-                            <Cell key={i} fill={m.isFuture ? '#bfdbfe' : m.isPast ? '#93c5fd' : '#1d4ed8'} />
-                          ))}
+                          {monthly.map((m, i) => {
+                            const base = m.revenue >= 10000 ? '#16a34a' : m.revenue >= 8000 ? '#ca8a04' : '#dc2626';
+                            const fill = m.isFuture ? (m.revenue >= 10000 ? '#bbf7d0' : m.revenue >= 8000 ? '#fef08a' : '#fecaca') : base;
+                            return <Cell key={i} fill={fill} />;
+                          })}
                         </Bar>
                       : houseData.map((h, i) =>
                           <Bar key={h.id} stackId="r" dataKey={`rev_h${h.id}`} fill={HOUSE_COLORS[i % HOUSE_COLORS.length]} name={h.name} radius={i === houseData.length-1 ? [4,4,0,0] : [0,0,0,0]} />
@@ -399,9 +444,11 @@ export default function DashboardPage() {
                     {occBreak === 'total'
                       ? <Bar dataKey="occupancy_rate" radius={[4,4,0,0]} name="Auslastung" cursor="pointer"
                           onClick={d => d.booking_ids?.length && setDrillDown({ title: `Buchungen ${d.monthLabel}`, ids: d.booking_ids })}>
-                          {monthly.map((m, i) => (
-                            <Cell key={i} fill={m.isFuture ? '#6ee7b7' : m.isPast ? '#34d399' : '#10b981'} />
-                          ))}
+                          {monthly.map((m, i) => {
+                            const base = m.occupancy_rate >= 70 ? '#16a34a' : m.occupancy_rate >= 50 ? '#ca8a04' : '#dc2626';
+                            const fill = m.isFuture ? (m.occupancy_rate >= 70 ? '#bbf7d0' : m.occupancy_rate >= 50 ? '#fef08a' : '#fecaca') : base;
+                            return <Cell key={i} fill={fill} />;
+                          })}
                         </Bar>
                       : houseData.map((h, i) =>
                           <Bar key={h.id} dataKey={`occ_h${h.id}`} fill={HOUSE_COLORS[i % HOUSE_COLORS.length]} radius={[4,4,0,0]} name={h.name} />
@@ -503,8 +550,8 @@ export default function DashboardPage() {
           <div className="card">
             <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
               <div>
-                <h2 className="font-semibold text-gray-800">Cash Flow — tatsächliche Zahlungseingänge</h2>
-                <p className="text-xs text-gray-400">Pro Rechnungsdatum (inkl. Teilrechnungen & Stornos) — nicht zu verwechseln mit dem Accrual-Umsatz oben</p>
+                <h2 className="font-semibold text-gray-800">Einnahme-Cashflow — tatsächliche Zahlungseingänge</h2>
+                <p className="text-xs text-gray-400">Nach Check-in-Datum (kein echter Cashflow) — nicht zu verwechseln mit dem Accrual-Umsatz oben</p>
               </div>
             </div>
             <div className="flex gap-6 mb-3 text-xs flex-wrap">
@@ -605,7 +652,7 @@ export default function DashboardPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    {['Haus','Kapazität','Buchungen','Nächte','Auslastung','Umsatz','ADR','RevPAR','Stornos'].map(h => (
+                    {['Haus','Kapazität','Buchungen','Nächte','Auslastung','Umsatz','ADR','RevPAR','Ø Pers.','€/Pers./Nacht','Stornos'].map(h => (
                       <th key={h} className="text-left text-gray-500 font-medium pb-2 pr-4">{h}</th>
                     ))}
                   </tr>
@@ -625,6 +672,8 @@ export default function DashboardPage() {
                       <td className="py-3 pr-4 font-medium">{formatCurrency(h.revenue)}</td>
                       <td className="py-3 pr-4">{formatCurrency(h.adr)}</td>
                       <td className="py-3 pr-4">{formatCurrency(h.revpar)}</td>
+                      <td className="py-3 pr-4 text-center">{h.avg_guests ? h.avg_guests.toFixed(1) : '—'}</td>
+                      <td className="py-3 pr-4 font-medium">{h.avg_guests && h.adr ? formatCurrency(h.adr / h.avg_guests) : '—'}</td>
                       <td className="py-3 pr-4 text-red-600">{h.cancellations}</td>
                     </tr>
                   ))}

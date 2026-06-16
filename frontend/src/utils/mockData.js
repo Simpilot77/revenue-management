@@ -937,6 +937,8 @@ export function calcHouses(from, to) {
     const availBed   = h.capacity * days;
     const availHouse = days; // one house: available nights = days in period
     const bedNights = bks.reduce((s,b)=>s+b.guest_count*b.nights,0);
-    return { id:h.id, name:h.name, short_name:h.short_name, capacity:h.capacity, bookings:bks.length, revenue, nights, adr:parseFloat(adr.toFixed(2)), cancellations, available_bed_nights:availBed, occupancy_rate:availHouse>0?parseFloat(((nights/availHouse)*100).toFixed(1)):0, revpar:availBed>0?parseFloat((revenue/availBed).toFixed(2)):0 };
+    const totalGuests = bks.reduce((s,b)=>s+(parseFloat(b.guest_count)||1),0);
+    const avg_guests = bks.length > 0 ? parseFloat((totalGuests/bks.length).toFixed(1)) : 0;
+    return { id:h.id, name:h.name, short_name:h.short_name, capacity:h.capacity, bookings:bks.length, revenue, nights, adr:parseFloat(adr.toFixed(2)), cancellations, available_bed_nights:availBed, occupancy_rate:availHouse>0?parseFloat(((nights/availHouse)*100).toFixed(1)):0, revpar:availBed>0?parseFloat((revenue/availBed).toFixed(2)):0, avg_guests };
   });
 }
