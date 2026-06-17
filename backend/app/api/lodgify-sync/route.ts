@@ -183,34 +183,50 @@ export async function POST() {
 
   if (!unique.length) return NextResponse.json({ synced: 0, total: 0 })
 
-  // Fetch existing external_references to split insert vs update
-  const extRefs = unique.map(b => b.external_reference)
-  const { data: existing } = await supabase
+  // Fetch ALL existing bookings to match by external_reference OR by house+dates
+  const { data: allExisting } = await supabase
     .from('bookings')
-    .select('id, external_reference, invoice_number')
-    .in('external_reference', extRefs)
+    .select('id, external_reference, house_id, checkin_date, checkout_date, invoice_number')
 
-  const existingMap: Record<string, any> = {}
-  ;(existing || []).forEach(e => { existingMap[e.external_reference] = e })
+  // Match by external_reference first, then fallback to house_id+checkin+checkout
+  const byExtRef: Record<string, any> = {}
+  const byDateKey: Record<string, any> = {}
+  ;(allExisting || []).forEach(e => {
+    if (e.external_reference) byExtRef[e.external_reference] = e
+    const dk = `${e.house_id}|${e.checkin_date?.slice(0,10)}|${e.checkout_date?.slice(0,10)}`
+    byDateKey[dk] = e
+  })
 
-  const toInsert = unique.filter(b => !existingMap[b.external_reference])
-  const toUpdate = unique.filter(b => existingMap[b.external_reference])
+  const toInsert: any[] = []
+  const toUpdate: any[] = []
+
+  for (const b of unique) {
+    const byRef = byExtRef[b.external_reference]
+    const dk = `${b.house_id}|${b.checkin_date}|${b.checkout_date}`
+    const byDate = !byRef ? byDateKey[dk] : null
+    const match = byRef || byDate
+
+    if (match) {
+      toUpdate.push({ booking: b, existing: match })
+    } else {
+      toInsert.push(b)
+    }
+  }
 
   let errors: string[] = []
 
-  // Insert new
+  // Insert truly new bookings
   if (toInsert.length) {
     const { error } = await supabase.from('bookings').insert(toInsert)
     if (error) errors.push('insert: ' + error.message)
   }
 
-  // Update existing — preserve invoice_number from DB
-  for (const b of toUpdate) {
-    const existing = existingMap[b.external_reference]
-    const payload = { ...b }
+  // Update existing — preserve invoice_number, set external_reference if missing
+  for (const { booking, existing } of toUpdate) {
+    const payload: any = { ...booking }
     if (existing.invoice_number) payload.invoice_number = existing.invoice_number
     const { error } = await supabase.from('bookings').update(payload).eq('id', existing.id)
-    if (error) errors.push(`update ${b.external_reference}: ${error.message}`)
+    if (error) errors.push(`update ${booking.external_reference}: ${error.message}`)
   }
 
   if (errors.length) return NextResponse.json({ error: errors.join('; ') }, { status: 500 })
