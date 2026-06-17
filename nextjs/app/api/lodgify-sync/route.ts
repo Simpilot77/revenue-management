@@ -183,16 +183,42 @@ export async function POST() {
 
   if (!unique.length) return NextResponse.json({ synced: 0, total: 0 })
 
-  // Upsert — on conflict of external_reference update lodgify fields, preserve invoice_number
-  const { error } = await supabase.from('bookings').upsert(unique, {
-    onConflict: 'external_reference',
-    ignoreDuplicates: false,
-  })
+  // Fetch existing external_references to split insert vs update
+  const extRefs = unique.map(b => b.external_reference)
+  const { data: existing } = await supabase
+    .from('bookings')
+    .select('id, external_reference, invoice_number')
+    .in('external_reference', extRefs)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const existingMap: Record<string, any> = {}
+  ;(existing || []).forEach(e => { existingMap[e.external_reference] = e })
+
+  const toInsert = unique.filter(b => !existingMap[b.external_reference])
+  const toUpdate = unique.filter(b => existingMap[b.external_reference])
+
+  let errors: string[] = []
+
+  // Insert new
+  if (toInsert.length) {
+    const { error } = await supabase.from('bookings').insert(toInsert)
+    if (error) errors.push('insert: ' + error.message)
+  }
+
+  // Update existing — preserve invoice_number from DB
+  for (const b of toUpdate) {
+    const existing = existingMap[b.external_reference]
+    const payload = { ...b }
+    if (existing.invoice_number) payload.invoice_number = existing.invoice_number
+    const { error } = await supabase.from('bookings').update(payload).eq('id', existing.id)
+    if (error) errors.push(`update ${b.external_reference}: ${error.message}`)
+  }
+
+  if (errors.length) return NextResponse.json({ error: errors.join('; ') }, { status: 500 })
 
   return NextResponse.json({
     synced: unique.length,
+    inserted: toInsert.length,
+    updated: toUpdate.length,
     regular: unique.filter(b => !b.is_owner_block).length,
     ownerBlocks: unique.filter(b => b.is_owner_block).length,
     syncedAt: new Date().toISOString(),
