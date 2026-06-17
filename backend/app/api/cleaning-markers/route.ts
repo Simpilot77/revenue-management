@@ -17,7 +17,31 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const supabase = await createClient()
   const body = await req.json()
-  const { data, error } = await supabase.from('cleaning_markers').upsert(body, { onConflict: 'booking_id,marker_date' }).select().single()
+
+  // For manual markers (no booking_id), conflict key is house_id+marker_date.
+  // For booking-linked markers, conflict key is booking_id+marker_date.
+  if (body.booking_id) {
+    const { data, error } = await supabase
+      .from('cleaning_markers')
+      .upsert(body, { onConflict: 'booking_id,marker_date' })
+      .select().single()
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(data, { status: 201 })
+  }
+
+  // Manual marker — delete existing for same house+date first, then insert fresh
+  if (body.house_id && body.marker_date) {
+    await supabase
+      .from('cleaning_markers')
+      .delete()
+      .eq('house_id', body.house_id)
+      .eq('marker_date', body.marker_date)
+      .is('booking_id', null)
+  }
+  const { data, error } = await supabase
+    .from('cleaning_markers')
+    .insert(body)
+    .select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data, { status: 201 })
 }
