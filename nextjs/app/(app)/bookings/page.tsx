@@ -125,6 +125,8 @@ export default function BookingsPage() {
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc')
   const [editingCell, setEditingCell] = useState<any>(null)
   const [duplicateInvoices, setDuplicateInvoices] = useState(new Set<number>())
+  const [syncing, setSyncing] = useState(false)
+  const [syncMsg, setSyncMsg] = useState('')
   const limit = 25
 
   const loadAll = useCallback(async () => {
@@ -201,11 +203,29 @@ export default function BookingsPage() {
 
   const totalPages = Math.ceil(total / limit)
 
+  const handleLodgifySync = async () => {
+    setSyncing(true)
+    setSyncMsg('')
+    try {
+      const res = await fetch('/api/lodgify-sync', { method: 'POST' })
+      const j = await res.json()
+      if (j.error) { setSyncMsg('Fehler: ' + j.error) }
+      else { setSyncMsg(`✅ ${j.regular} Buchungen + ${j.ownerBlocks} Sperren synchronisiert`); load() }
+    } catch (e: any) { setSyncMsg('Fehler: ' + e.message) }
+    setSyncing(false)
+  }
+
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold text-gray-900">Buchungen <span className="text-gray-400 text-lg font-normal">({total})</span></h1>
-        <Link href="/bookings/new" className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors">+ Neue Buchung</Link>
+        <div className="flex gap-2 items-center flex-wrap">
+          {syncMsg && <span className="text-sm text-gray-600">{syncMsg}</span>}
+          <button onClick={handleLodgifySync} disabled={syncing} className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
+            {syncing ? '⏳ Synchronisiere…' : '🔄 Lodgify Sync'}
+          </button>
+          <Link href="/bookings/new" className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors">+ Neue Buchung</Link>
+        </div>
       </div>
 
       {/* Analytics */}

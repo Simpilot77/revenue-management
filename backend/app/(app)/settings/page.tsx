@@ -113,6 +113,28 @@ export default function SettingsPage() {
       </Section>
 
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-50 font-semibold text-gray-800">🔗 Lodgify Integration</div>
+        <div className="px-6 py-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-medium text-gray-600 mb-1">API-Schlüssel</label>
+            <input type="password" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+              value={s.extra_settings?.lodgify_api_key || ''}
+              onChange={e => setS((prev: any) => ({ ...prev, extra_settings: { ...(prev.extra_settings||{}), lodgify_api_key: e.target.value } }))}
+              placeholder="Lodgify API Key…" />
+            <p className="text-xs text-gray-400 mt-1">Zu finden unter Lodgify → Einstellungen → API</p>
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-medium text-gray-600 mb-1">Haus-Mapping (JSON)</label>
+            <input type="text" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono"
+              value={s.extra_settings?.lodgify_house_map || '{}'}
+              onChange={e => setS((prev: any) => ({ ...prev, extra_settings: { ...(prev.extra_settings||{}), lodgify_house_map: e.target.value } }))}
+              placeholder='{"12345": 1, "12346": 2, "12347": 3}' />
+            <p className="text-xs text-gray-400 mt-1">Lodgify Property-ID → Haus-ID in der App. Z.B.: {`{"12345": 1, "12346": 2}`}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-50 font-semibold text-gray-800">🗑️ Zusatzaufgaben-Vorlagen</div>
         <div className="px-6 py-5 space-y-3">
           <div className="flex flex-wrap gap-2">
