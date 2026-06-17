@@ -102,7 +102,6 @@ export default function DashboardPage() {
   const [occBreak, setOccBreak] = useState<'total'|'house'>('total')
   const [syncing, setSyncing] = useState(false)
   const [syncMsg, setSyncMsg] = useState('')
-  const [syncModeModal, setSyncModeModal] = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -253,23 +252,14 @@ export default function DashboardPage() {
     }))
   }, [active, monthly])
 
-  const handleLodgifySync = async (mode: 'new_only' | 'full_sync') => {
-    setSyncModeModal(false)
+  const handleLodgifySync = async () => {
     setSyncing(true); setSyncMsg('')
-    const res = await fetch('/api/lodgify-sync', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ mode }),
-    })
+    const res = await fetch('/api/lodgify-sync', {method:'POST'})
     const j = await res.json()
     if (j.error) setSyncMsg('❌ '+j.error)
-    else if (mode === 'full_sync') setSyncMsg(`✅ Komplett-Sync: ${j.regular} Buchungen importiert`)
-    else setSyncMsg(`✅ ${j.inserted} neu, ${j.updated} aktualisiert`)
+    else setSyncMsg(`✅ ${j.regular} Buchungen synchronisiert`)
     setSyncing(false)
-    setTimeout(()=>setSyncMsg(''),8000)
-    // reload bookings
-    const from2 = from, to2 = to
-    fetch(`/api/bookings?from=${from2}&to=${to2}&limit=1000`).then(r=>r.json()).then(d=>setBookings(d.data??[]))
+    setTimeout(()=>setSyncMsg(''),5000)
   }
 
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">Daten werden geladen…</div>
@@ -289,7 +279,7 @@ export default function DashboardPage() {
           <input type="date" className="form-input" style={{width:'9rem'}} value={from} onChange={e=>setFrom(e.target.value)} />
           <label className="text-xs text-gray-500">Bis</label>
           <input type="date" className="form-input" style={{width:'9rem'}} value={to} onChange={e=>setTo(e.target.value)} />
-          <button onClick={() => setSyncModeModal(true)} disabled={syncing} className="btn-secondary flex items-center gap-1.5">
+          <button onClick={handleLodgifySync} disabled={syncing} className="btn-secondary flex items-center gap-1.5">
             {syncing ? '⏳' : '🔄'} Lodgify Import
           </button>
           <a href="/bookings/new" className="btn-primary">+ Neue Buchung</a>
@@ -297,39 +287,6 @@ export default function DashboardPage() {
       </div>
 
       {syncMsg && <div className={`text-sm px-4 py-2 rounded-lg ${syncMsg.startsWith('✅') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{syncMsg}</div>}
-
-      {/* Lodgify Sync Mode Modal */}
-      {syncModeModal && (
-        <div style={{ position:'fixed', inset:0, zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(0,0,0,0.45)' }} onClick={() => setSyncModeModal(false)}>
-          <div className="card" style={{ minWidth:360, maxWidth:440, padding:28 }} onClick={e => e.stopPropagation()}>
-            <h3 className="text-base font-semibold text-gray-900 mb-2">🔄 Lodgify-Synchronisierung</h3>
-            <p className="text-sm text-gray-500 mb-5">Wie soll synchronisiert werden?</p>
-            <div className="flex flex-col gap-3 mb-5">
-              <button
-                className="w-full text-left p-4 rounded-xl border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 transition-colors"
-                onClick={() => handleLodgifySync('new_only')}
-              >
-                <div className="font-semibold text-blue-900 mb-1">➕ Nur neue Buchungen</div>
-                <div className="text-xs text-blue-700">Bereits vorhandene Buchungen bleiben unverändert. Neue Buchungen aus Lodgify werden hinzugefügt.</div>
-              </button>
-              <button
-                className="w-full text-left p-4 rounded-xl border-2 border-red-200 bg-red-50 hover:bg-red-100 transition-colors"
-                onClick={() => {
-                  if (confirm('⚠️ Alle bestehenden Buchungen werden gelöscht und komplett neu aus Lodgify importiert. Fortfahren?')) {
-                    handleLodgifySync('full_sync')
-                  }
-                }}
-              >
-                <div className="font-semibold text-red-900 mb-1">🔁 Komplett neu synchronisieren</div>
-                <div className="text-xs text-red-700">Alle bestehenden Buchungen werden gelöscht und vollständig aus Lodgify neu importiert.</div>
-              </button>
-            </div>
-            <div className="flex justify-end">
-              <button className="btn-secondary text-sm" onClick={() => setSyncModeModal(false)}>Abbrechen</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {kpis ? (
         <>

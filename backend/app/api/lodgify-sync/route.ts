@@ -59,13 +59,8 @@ async function lodgifyGet(apiKey: string, path: string, params: Record<string, a
   return res.json()
 }
 
-export async function POST(request: Request) {
+export async function POST() {
   const supabase = await createClient()
-
-  // mode: 'new_only' (default) = only insert/update, no deletes
-  //       'full_sync'           = delete all bookings first, then re-import everything
-  let mode = 'new_only'
-  try { const body = await request.json(); mode = body.mode || 'new_only' } catch (_) {}
 
   // Load settings (API key + house map)
   const { data: settings } = await supabase.from('company_settings').select('*').order('id').limit(1).maybeSingle()
@@ -187,20 +182,6 @@ export async function POST(request: Request) {
   })
 
   if (!unique.length) return NextResponse.json({ synced: 0, total: 0 })
-
-  // full_sync: delete all bookings first, then insert everything fresh
-  if (mode === 'full_sync') {
-    const { error: delErr } = await supabase.from('bookings').delete().neq('id', 0)
-    if (delErr) return NextResponse.json({ error: 'Löschen fehlgeschlagen: ' + delErr.message }, { status: 500 })
-    const { error: insErr } = await supabase.from('bookings').insert(unique)
-    if (insErr) return NextResponse.json({ error: 'Import fehlgeschlagen: ' + insErr.message }, { status: 500 })
-    return NextResponse.json({
-      synced: unique.length, inserted: unique.length, updated: 0, deleted: 'all',
-      regular: unique.filter(b => !b.is_owner_block).length,
-      ownerBlocks: unique.filter(b => b.is_owner_block).length,
-      syncedAt: new Date().toISOString(),
-    })
-  }
 
   // Fetch ALL existing bookings to match by external_reference OR by house+dates
   const { data: allExisting } = await supabase
