@@ -1,30 +1,23 @@
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const rateLimit = require('express-rate-limit');
+const { createServer } = require('http');
+const { parse } = require('url');
+const next = require('next');
+const path = require('path');
 
-const app = express();
+const port = parseInt(process.env.PORT || '3000', 10);
+const dev = false;
+const dir = path.join(__dirname, '..');
 
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-  credentials: true,
-}));
-app.use(express.json());
+const app = next({ dev, dir });
+const handle = app.getRequestHandler();
 
-app.use('/api/auth', rateLimit({ windowMs: 15 * 60 * 1000, max: 20 }));
-
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/users', require('./routes/users'));
-app.use('/api/bookings', require('./routes/bookings'));
-app.use('/api/reports', require('./routes/reports'));
-app.use('/api/meta', require('./routes/meta'));
-
-app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
-
-app.use((err, req, res, _next) => {
-  console.error(err);
-  res.status(500).json({ error: 'Interner Serverfehler' });
+app.prepare().then(() => {
+  createServer((req, res) => {
+    const parsedUrl = parse(req.url, true);
+    handle(req, res, parsedUrl);
+  }).listen(port, () => {
+    console.log(`> Next.js läuft auf http://localhost:${port}`);
+  });
+}).catch(err => {
+  console.error('Fehler beim Start von Next.js:', err);
+  process.exit(1);
 });
-
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`Server läuft auf Port ${PORT}`));
