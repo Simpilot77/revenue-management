@@ -290,11 +290,11 @@ export default function BookingsPage() {
               ) : sorted.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length + 2} className="text-center text-gray-400 py-10">Keine Buchungen gefunden</td></tr>
               ) : sorted.map((b: any, idx: number) => (
-                <tr key={b.id} className={`hover:bg-gray-50 cursor-pointer ${duplicateInvoices.has(b.id) ? 'bg-red-50/60' : ''}`} onClick={() => router.push(`/bookings/${b.id}/edit`)}>
+                <tr key={b.id} className={`hover:bg-gray-50 cursor-pointer ${duplicateInvoices.has(b.id) ? 'bg-red-50/60' : ''}`} onClick={() => router.push(`/bookings/${b.id}`)}>
                   <td className="px-3 py-2 text-center text-xs text-gray-400 font-mono">{(page - 1) * limit + idx + 1}</td>
                   <td className="px-2 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                     <div className="flex items-center gap-1">
-                      <button onClick={() => router.push(`/bookings/${b.id}/edit`)} className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold" title="Bearbeiten">
+                      <button onClick={() => router.push(`/bookings/${b.id}`)} className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold" title="Bearbeiten">
                         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
                         Bearbeiten
                       </button>
