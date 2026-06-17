@@ -1,12 +1,15 @@
 {
   "name": "nextjs",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "NODE_OPTIONS='--max-old-space-size=1536' next build",
     "start": "next start",
     "lint": "eslint"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
