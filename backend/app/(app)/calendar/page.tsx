@@ -28,6 +28,8 @@ const DAY_COL_W = 38
 const ROW_H = 56
 const HOUSE_COL_W = 130
 const VISIBLE_STATUSES = ['bestaetigt','eingecheckt','ausgecheckt','angefragt','gesperrt']
+const MINI_DAY_NAMES = ['M','D','M','D','F','S','S']
+const MONTH_NAMES_SHORT = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez']
 
 const DEFAULT_CLEANING_FORM = { scope:'reinigung', windows:false, deadlineTime:'', durationMin:'', cost:'', notes:'', cleanerConfirmed:false }
 
@@ -292,6 +294,11 @@ export default function CalendarPage() {
         </div>
       </div>
 
+      {/* House status section */}
+      {!loading && houses.length > 0 && (
+        <HouseStatusSection houses={houses} bookings={bookings} tasks={tasks} />
+      )}
+
       {loading && <div className="flex items-center justify-center h-32 text-gray-400">Laden…</div>}
 
       {!loading && (
@@ -445,7 +452,11 @@ export default function CalendarPage() {
             <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm inline-block bg-amber-200 border border-amber-400" />🧹 Organisiert</span>
             <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm inline-block bg-green-200 border border-green-400" />🧹 Erledigt</span>
             <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor:'#a855f7' }} />Heute</span>
+            <span className="text-gray-400 ml-2">· Leere Zelle klicken = Reinigung markieren · Zelle in „Zusatzaufgaben" = Aufgabe eintragen</span>
           </div>
+
+          {/* Mini overview */}
+          <MiniOverview houses={houses} bookings={bookings} cleaningMarkers={markers} onNavigate={(id) => router.push(`/bookings/${id}/edit`)} />
         </div>
       )}
 
@@ -643,6 +654,244 @@ export default function CalendarPage() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── HouseStatusSection ────────────────────────────────────────────────────────
+function fmtDateFull(ds: string) {
+  if (!ds) return '—'
+  return new Date(ds).toLocaleDateString('de-DE', { day:'2-digit', month:'long' })
+}
+function fmtDate2(ds: string) {
+  if (!ds) return ''
+  return new Date(ds).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit' })
+}
+
+function HouseStatusSection({ houses, bookings, tasks }: { houses: any[]; bookings: any[]; tasks: Record<number,any> }) {
+  const today = new Date().toISOString().slice(0, 10)
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 px-6 pt-4 pb-2 shrink-0">
+      {houses.map(house => (
+        <HouseCard key={house.id} house={house} bookings={bookings} tasks={tasks} today={today} />
+      ))}
+    </div>
+  )
+}
+
+function HouseCard({ house, bookings, tasks, today }: { house: any; bookings: any[]; tasks: Record<number,any>; today: string }) {
+  const [detailOpen, setDetailOpen] = useState(false)
+  const activeStatuses = ['bestaetigt','eingecheckt','ausgecheckt']
+
+  const current = bookings.find(b =>
+    b.house_id === house.id && activeStatuses.includes(b.status) &&
+    b.checkin_date?.slice(0,10) <= today && b.checkout_date?.slice(0,10) >= today
+  )
+  const inquiry = !current && bookings.find(b =>
+    b.house_id === house.id && b.status === 'angefragt' &&
+    b.checkin_date?.slice(0,10) <= today && b.checkout_date?.slice(0,10) >= today
+  )
+  const next = bookings
+    .filter(b => b.house_id === house.id && ['bestaetigt','eingecheckt'].includes(b.status) && b.checkin_date?.slice(0,10) > today)
+    .sort((a,b) => a.checkin_date.localeCompare(b.checkin_date))[0]
+  const lastOut = bookings
+    .filter(b => b.house_id === house.id && b.checkout_date?.slice(0,10) < today && activeStatuses.includes(b.status))
+    .sort((a,b) => b.checkout_date.localeCompare(a.checkout_date))[0]
+
+  const lastT = lastOut ? (tasks[lastOut.id] || {}) : {}
+  const cleaningDone = lastOut ? !!lastT.cleaning_done : true
+  const cleaningOrg  = lastOut ? !!lastT.cleaning_org  : false
+  const occupied = !!current
+  const isInquiry = !!inquiry
+
+  const daysUntilFree = current ? Math.max(0, Math.ceil((new Date(current.checkout_date).getTime() - new Date(today).getTime()) / 86400000)) : 0
+  const daysUntilNext = next ? Math.max(0, Math.ceil((new Date(next.checkin_date).getTime() - new Date(today).getTime()) / 86400000)) : null
+
+  let progressPct = 0
+  if (occupied && current) {
+    const total = Math.max(1, (new Date(current.checkout_date).getTime() - new Date(current.checkin_date).getTime()) / 86400000)
+    progressPct = Math.min(100, Math.round(((new Date(today).getTime() - new Date(current.checkin_date).getTime()) / 86400000 / total) * 100))
+  }
+
+  const occupied_i = occupied ? 'bg-red-500' : isInquiry ? 'bg-violet-500' : !cleaningDone && lastOut ? 'bg-amber-400' : 'bg-emerald-500'
+  const statusLabel = occupied ? 'Belegt' : isInquiry ? 'Angefragt' : !cleaningDone && lastOut ? 'Reinigung ausstehend' : daysUntilNext !== null ? `Frei – in ${daysUntilNext===0?'heute':daysUntilNext===1?'1 Tag':`${daysUntilNext} Tagen`} belegt` : 'Frei'
+  const statusIcon  = occupied ? '🏠' : isInquiry ? '❓' : !cleaningDone && lastOut ? '🧹' : '✅'
+  const activeBooking = current || inquiry
+  const detailBooking = activeBooking || next
+
+  return (
+    <>
+      {detailOpen && detailBooking && (
+        <div style={{ position:'fixed', inset:0, zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(0,0,0,0.45)' }} onClick={() => setDetailOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full mx-4" style={{ maxWidth:480 }} onClick={e => e.stopPropagation()}>
+            <div className="bg-gradient-to-br from-blue-700 to-blue-900 rounded-t-2xl px-6 py-5 text-white relative">
+              <button onClick={() => setDetailOpen(false)} className="absolute top-4 right-4 text-white/70 hover:text-white text-xl">✕</button>
+              <div className="text-xs font-semibold opacity-70 uppercase tracking-wider mb-1">{house.name}</div>
+              <div className="text-xl font-bold">{detailBooking.guest_name}</div>
+            </div>
+            <div className="px-6 py-5 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-gray-50 rounded-xl p-3"><div className="text-xs text-gray-400 mb-1">Check-in</div><div className="text-sm font-semibold">{fmtDateFull(detailBooking.checkin_date)}</div></div>
+                <div className="bg-gray-50 rounded-xl p-3"><div className="text-xs text-gray-400 mb-1">Check-out</div><div className="text-sm font-semibold">{fmtDateFull(detailBooking.checkout_date)}</div></div>
+              </div>
+              <div className="flex justify-between text-sm"><span className="text-gray-400">Nächte</span><span className="font-medium">{detailBooking.nights}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-gray-400">Personen</span><span className="font-medium">{detailBooking.guest_count}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-gray-400">Gesamtpreis</span><span className="font-medium">{new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(parseFloat(detailBooking.total_price||0))}</span></div>
+            </div>
+          </div>
+        </div>
+      )}
+      <div className="rounded-2xl overflow-hidden shadow-md ring-1 ring-gray-200 cursor-pointer hover:ring-blue-300 hover:shadow-lg transition-shadow" onClick={() => detailBooking && setDetailOpen(true)}>
+        <div className="bg-gradient-to-br from-blue-700 to-blue-900 p-5 text-white relative">
+          <div className="flex items-start justify-between">
+            <div><div className="text-xl font-bold">{house.name}</div><div className="text-sm opacity-75 mt-0.5">{house.capacity} Betten</div></div>
+            <div className="text-4xl drop-shadow-sm">{statusIcon}</div>
+          </div>
+          <div className={`mt-3 inline-flex items-center ${occupied_i} bg-opacity-80 border border-white/30 text-white rounded-full px-4 py-1.5 text-sm font-bold shadow-sm`}>{statusLabel}</div>
+          {activeBooking && (
+            <div className="absolute bottom-3 right-4 text-xs opacity-80 text-right">
+              <div>📅 {fmtDateFull(activeBooking.checkin_date)}</div>
+              <div>🏁 {fmtDateFull(activeBooking.checkout_date)}</div>
+            </div>
+          )}
+        </div>
+        <div className="h-2 bg-gray-200"><div className={`h-full ${occupied?'bg-red-400':isInquiry?'bg-violet-400':!cleaningDone&&lastOut?'bg-amber-400':'bg-emerald-400'}`} style={{ width:`${progressPct}%` }} /></div>
+        <div className="bg-white p-4 space-y-2">
+          {occupied && current ? (
+            <>
+              <div className="flex items-center gap-2"><span className="text-xs text-gray-400 w-16">Gast</span><span className="text-sm font-semibold text-gray-800 truncate">{current.guest_name}</span></div>
+              <div className="flex items-center gap-2"><span className="text-xs text-gray-400 w-16">Abreise</span><span className="text-sm font-medium text-red-700">{fmtDateFull(current.checkout_date)}</span><span className={`text-xs rounded-full px-2 py-0.5 ml-1 ${daysUntilFree===0?'bg-amber-100 text-amber-700':'bg-red-50 text-red-500'}`}>{daysUntilFree===0?'Heute':daysUntilFree===1?'Morgen':`in ${daysUntilFree} Tagen`}</span></div>
+              <div className="flex items-center gap-2"><span className="text-xs text-gray-400 w-16">Reinigung</span>{cleaningDone?<span className="text-xs rounded-full px-2 py-0.5 bg-emerald-100 text-emerald-700">✅ Bestätigt</span>:cleaningOrg?<span className="text-xs rounded-full px-2 py-0.5 bg-yellow-100 text-yellow-700">🗓 Organisiert</span>:<span className="text-xs rounded-full px-2 py-0.5 bg-red-100 text-red-600">⚠ Noch organisieren</span>}</div>
+              {next && <div className="flex items-center gap-2"><span className="text-xs text-gray-400 w-16">Folge</span><span className="text-xs text-blue-700 font-medium">{next.guest_name}</span><span className="text-xs text-gray-400 ml-1">· {fmtDate2(next.checkin_date)}</span></div>}
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-2"><span className="text-xs text-gray-400 w-16">Status</span><span className={`text-sm font-semibold ${cleaningDone?'text-emerald-600':'text-amber-600'}`}>{cleaningDone?'🏡 Frei':'Reinigung erforderlich'}</span></div>
+              {next && <div className="flex items-center gap-2"><span className="text-xs text-gray-400 w-16">Ankunft</span><span className="text-sm font-medium text-blue-700">{fmtDateFull(next.checkin_date)}</span>{daysUntilNext!==null&&<span className={`text-xs rounded-full px-2 py-0.5 ml-1 ${daysUntilNext===0?'bg-amber-100 text-amber-700':'bg-blue-50 text-blue-500'}`}>{daysUntilNext===0?'Heute':daysUntilNext===1?'Morgen':`in ${daysUntilNext} Tagen`}</span>}</div>}
+            </>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ── MiniOverview ──────────────────────────────────────────────────────────────
+function toMonthVal(y: number, m: number) { return `${y}-${String(m+1).padStart(2,'0')}` }
+function fromMonthVal(val: string) { const [y,m] = val.split('-'); return { y:parseInt(y), m:parseInt(m)-1 } }
+
+function MiniOverview({ houses, bookings, cleaningMarkers, onNavigate }: { houses: any[]; bookings: any[]; cleaningMarkers: any[]; onNavigate: (id: number) => void }) {
+  const now = new Date()
+  const [fromVal, setFromVal] = useState(toMonthVal(now.getFullYear(), now.getMonth()))
+  const [toVal,   setToVal]   = useState(toMonthVal(now.getFullYear(), Math.min(now.getMonth()+5, 11)))
+  const [allBooks, setAllBooks] = useState<any[]>([])
+
+  const fp = fromMonthVal(fromVal), tp = fromMonthVal(toVal)
+  const months: { y: number; m: number }[] = []
+  let cy = fp.y, cm = fp.m
+  while ((cy < tp.y || (cy === tp.y && cm <= tp.m)) && months.length < 24) {
+    months.push({ y:cy, m:cm }); cm++; if (cm>11){cm=0;cy++}
+  }
+
+  useEffect(() => {
+    if (!months.length) return
+    const first = months[0], last = months[months.length-1]
+    const dim = new Date(last.y, last.m+1, 0).getDate()
+    const from = `${first.y}-${String(first.m+1).padStart(2,'0')}-01`
+    const to   = `${last.y}-${String(last.m+1).padStart(2,'0')}-${String(dim).padStart(2,'0')}`
+    fetch(`/api/bookings?from=${from}&to=${to}&limit=500`).then(r=>r.json()).then(d => setAllBooks(d.data??[]))
+  }, [fromVal, toVal])
+
+  // build cleaning day set from markers
+  const cleaningSet = new Set<string>()
+  cleaningMarkers.forEach(m => { if (m.marker_date) cleaningSet.add(`${m.house_id}_${m.marker_date}`) })
+
+  return (
+    <div className="mt-6 space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wider">Monatsübersicht je Haus</h2>
+        <div className="flex items-center gap-2 text-sm">
+          <button className="btn-secondary text-xs py-1 px-3" onClick={() => window.print()}>PDF exportieren</button>
+          <label className="text-gray-400 text-xs">Von</label>
+          <input type="month" className="form-select text-sm py-1 px-2" value={fromVal} onChange={e => setFromVal(e.target.value)} />
+          <label className="text-gray-400 text-xs">Bis</label>
+          <input type="month" className="form-select text-sm py-1 px-2" value={toVal} onChange={e => setToVal(e.target.value)} />
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        {houses.map(house => (
+          <div key={house.id} className="rounded-xl border border-gray-200 bg-white p-4 space-y-4 shadow-sm">
+            <div className="font-semibold text-gray-800 text-sm">{house.name} <span className="text-gray-400 font-normal text-xs ml-1">· {house.capacity} Betten</span></div>
+            {months.map(({ y, m }) => (
+              <MiniMonth key={`${y}-${m}`} year={y} month={m}
+                bookings={allBooks.filter(b => b.house_id === house.id && VISIBLE_STATUSES.includes(b.status))}
+                cleaningSet={cleaningSet} houseId={house.id} onNavigate={onNavigate} />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function MiniMonth({ year, month, bookings, cleaningSet, houseId, onNavigate }: { year:number; month:number; bookings:any[]; cleaningSet:Set<string>; houseId:number; onNavigate:(id:number)=>void }) {
+  const dim = new Date(year, month+1, 0).getDate()
+  const firstDow = (new Date(year, month, 1).getDay() + 6) % 7
+  const today = new Date().toISOString().slice(0,10)
+
+  const occ: Record<string, any> = {}
+  bookings.forEach(b => {
+    const ci = b.checkin_date?.slice(0,10), co = b.checkout_date?.slice(0,10)
+    if (!ci || !co) return
+    let cur = new Date(ci), end = new Date(co)
+    while (cur < end) { occ[cur.toISOString().slice(0,10)] = b; cur.setDate(cur.getDate()+1) }
+    if (!occ[co]) occ[co] = { _checkoutOnly:true, ...b }
+  })
+
+  const cells = [...Array(firstDow).fill(null), ...Array.from({length:dim},(_,i)=>i+1)]
+  while (cells.length % 7 !== 0) cells.push(null)
+  const weeks: (number|null)[][] = []
+  for (let i=0; i<cells.length; i+=7) weeks.push(cells.slice(i,i+7))
+
+  return (
+    <div>
+      <div className="text-xs font-semibold text-gray-500 mb-1">{MONTH_NAMES[month]} {year}</div>
+      <table className="w-full border-collapse" style={{ tableLayout:'fixed' }}>
+        <thead>
+          <tr>{MINI_DAY_NAMES.map((d,i) => <th key={i} className="text-center font-normal text-gray-300 pb-0.5" style={{ fontSize:'0.55rem', width:'14.28%' }}>{d}</th>)}</tr>
+        </thead>
+        <tbody>
+          {weeks.map((week, wi) => (
+            <tr key={wi}>
+              {week.map((day, di) => {
+                if (!day) return <td key={di} />
+                const d = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`
+                const booking = occ[d]
+                const isCheckin  = booking && booking.checkin_date?.slice(0,10) === d
+                const isCheckout = booking && booking.checkout_date?.slice(0,10) === d
+                const isMid      = booking && !isCheckin && !isCheckout
+                const isCurrent  = d === today
+                const isCleaning = cleaningSet.has(`${houseId}_${d}`)
+                const color      = booking ? getColor(booking.status) : null
+                return (
+                  <td key={di} style={{ padding:'1px', height:18, position:'relative', cursor:booking?'pointer':'default', backgroundColor:isCleaning?'#fef9c3':undefined }}
+                    title={isCleaning?`🧹 Reinigung · ${d}`:booking?`${booking.guest_name} · ${booking.checkin_date?.slice(0,10)} → ${booking.checkout_date?.slice(0,10)}`:undefined}
+                    onClick={() => booking && onNavigate(booking.id)}>
+                    <div style={{ position:'relative', height:16, borderRadius:isMid?0:isCheckin?'0 3px 3px 0':'3px 0 0 3px', overflow:'hidden', outline:isCurrent?'2px solid #a855f7':isCleaning?'1.5px solid #f59e0b':'none', outlineOffset:'-1px', boxShadow:isCurrent?'0 0 8px 1px rgba(168,85,247,0.7)':'none' }}>
+                      {isMid && <div style={{ position:'absolute', inset:0, backgroundColor:color! }} />}
+                      {isCheckin && <div style={{ position:'absolute', inset:0, background:'linear-gradient(to top left, #22c55e 50%, transparent 50%)' }} />}
+                      {isCheckout && <div style={{ position:'absolute', inset:0, background:'linear-gradient(to bottom right, #ef4444 50%, transparent 50%)' }} />}
+                      <div style={{ position:'relative', zIndex:1, textAlign:'center', fontSize:'0.6rem', lineHeight:'16px', fontWeight:isCurrent?700:400, color:isMid?'rgba(255,255,255,0.9)':isCurrent?'#7e22ce':isCleaning?'#b45309':'#6b7280' }}>
+                        {isCleaning&&!isMid?'🧹':isMid&&booking?.daily_rate>0?Math.round(booking.daily_rate):day}
+                      </div>
+                    </div>
+                  </td>
+                )
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
