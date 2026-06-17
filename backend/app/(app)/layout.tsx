@@ -14,6 +14,8 @@ const NAV = [
   { href: '/cleaning',   label: 'Reinigung',      icon: '🧹' },
   { href: '/reports',    label: 'Auswertungen',   icon: '📊' },
   { href: '/invoices',   label: 'Rechnungen',     icon: '🧾' },
+  { href: '/customers',  label: 'Kunden',         icon: '👥' },
+  { href: '/users',      label: 'Benutzer',       icon: '👤' },
   { href: '/settings',   label: 'Einstellungen',  icon: '⚙️' },
 ]
 
