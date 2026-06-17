@@ -1,5 +1,5 @@
 {
-  "synced_at": "2026-06-17T03:30:54.955024Z",
+  "synced_at": "2026-06-17T10:45:35.706818Z",
   "bookings": [
     {
       "id": 18588939,
@@ -3211,12 +3211,12 @@
       "checkout_date": "2026-09-11",
       "nights": 70,
       "guest_name": {
-        "first_name": "Jiayang",
-        "last_name": "Wang",
-        "full_name": "Jiayang Wang"
+        "first_name": "Liu",
+        "last_name": "Chenyang",
+        "full_name": "Liu Chenyang"
       },
       "company_name": null,
-      "guest_email": null,
+      "guest_email": "liuchenyang07@gmail.com",
       "guest_phone": "",
       "nationality": null,
       "is_returning_guest": false,
@@ -3310,6 +3310,64 @@
       "deposit_returned": false,
       "created_by": 1,
       "included_in_stats": true
+    },
+    {
+      "id": 21203663,
+      "house_id": 3,
+      "house_name": "Privates Teamhaus - viel Platz und Komfort, Rechnung B2B",
+      "house_short": "C",
+      "house_capacity": 6,
+      "channel_id": 1,
+      "channel_name": "Direkt",
+      "channel_short": "DIREKT",
+      "channel_color": "#10b981",
+      "external_reference": "21203663",
+      "booking_date": "2026-06-17",
+      "checkin_date": "2026-06-19",
+      "checkout_date": "2026-06-21",
+      "nights": 2,
+      "guest_name": {
+        "first_name": "Nils",
+        "last_name": "Flegel",
+        "full_name": "Nils Flegel"
+      },
+      "company_name": null,
+      "guest_email": "nils.flegel@gmx.de",
+      "guest_phone": "+491711956530",
+      "nationality": "DE",
+      "is_returning_guest": false,
+      "guest_count": 1,
+      "adults": 1,
+      "children": 0,
+      "daily_rate": 0.5,
+      "cleaning_fee": 0,
+      "discount_percent": 0,
+      "total_price": 1.0,
+      "currency": {
+        "id": 92,
+        "code": "EUR",
+        "name": "Euro",
+        "euro_forex": 1.0,
+        "symbol": "€  "
+      },
+      "payment_method": "ueberweisung",
+      "payment_status": "offen",
+      "invoice_number": null,
+      "status": "bestaetigt",
+      "is_owner_block": false,
+      "block_reason": null,
+      "cancellation_date": null,
+      "cancellation_reason": null,
+      "breakfast_included": false,
+      "pets_allowed": false,
+      "parking": true,
+      "guest_notes": null,
+      "internal_notes": null,
+      "guests_registered": false,
+      "deposit_taken": false,
+      "deposit_returned": false,
+      "created_by": 1,
+      "included_in_stats": true
     }
   ],
   "properties": [
@@ -3333,8 +3391,8 @@
     }
   ],
   "stats": {
-    "total": 58,
-    "reservations": 58,
+    "total": 59,
+    "reservations": 59,
     "owner_blocks": 0
   }
 }
