@@ -1,0 +1,3 @@
+module.exports=[32052,a=>{"use strict";var b=a.i(87924),c=a.i(69240),d=a.i(50944);a.s(["default",0,function(){let a=(0,d.useRouter)(),e=(0,c.createClient)();async function f(){await e.auth.signOut(),a.push("/login"),a.refresh()}return(0,b.jsx)("button",{onClick:f,className:"text-sm text-white/70 hover:text-white border border-white/30 hover:border-white/60 rounded-lg px-3 py-1.5 transition-colors",children:"Abmelden"})}])}];
+
+//# sourceMappingURL=app_dashboard_LogoutButton_tsx_092e5d4._.js.map
