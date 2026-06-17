@@ -102,6 +102,7 @@ export default function DashboardPage() {
   const [occBreak, setOccBreak] = useState<'total'|'house'>('total')
   const [syncing, setSyncing] = useState(false)
   const [syncMsg, setSyncMsg] = useState('')
+  const [syncModeModal, setSyncModeModal] = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -251,8 +252,6 @@ export default function DashboardPage() {
       payments: map[m.month]?.payments||0
     }))
   }, [active, monthly])
-
-  const [syncModeModal, setSyncModeModal] = useState(false)
 
   const handleLodgifySync = async (mode: 'new_only' | 'full_sync') => {
     setSyncModeModal(false)
