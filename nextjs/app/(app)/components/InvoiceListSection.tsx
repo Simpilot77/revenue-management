@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import InvoicePreviewModal from './InvoicePreviewModal'
-import { buildInvoicePreviewData, buildStornoPreviewData, buildPartialInvoicePreviewData } from '../tasks/pdfExport'
+import { buildInvoicePreviewData, buildStornoPreviewData, buildPartialInvoicePreviewData, exportInvoiceFromData } from '../tasks/pdfExport'
 
 const fmtEur = (v: number) =>
   new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(v ?? 0)
@@ -74,10 +74,9 @@ export default function InvoiceListSection({ booking, onUpdate, settings }: Prop
     setModal('storno')
   }
 
-  const openReprint = (invoice: any) => {
+  const openReprint = async (invoice: any) => {
     if (!invoice.data) return
-    setModalData({ ...invoice.data })
-    setModal('reprint')
+    await exportInvoiceFromData(invoice.data)
   }
 
   const handleModalClose = () => {

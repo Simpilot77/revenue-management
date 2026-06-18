@@ -1,6 +1,8 @@
 'use client'
 import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import { exportInvoiceFromData, buildStornoPreviewData } from '../tasks/pdfExport'
+import InvoicePreviewModal from '../components/InvoicePreviewModal'
 export const dynamic = 'force-dynamic'
 
 function fmtDate(d: string) { if (!d) return ''; return new Date(d).toLocaleDateString('de-DE') }
@@ -41,13 +43,20 @@ function findGaps(invoices: any[]) {
 export default function InvoicesPage() {
   const router = useRouter()
   const [invoices, setInvoices] = useState<any[]>([])
+  const [settings, setSettings] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [typeFilter, setTypeFilter] = useState('')
+  const [modal, setModal] = useState<any>(null)
 
   const load = () => {
     setLoading(true)
-    fetch('/api/invoices').then(r => r.json()).then(d => {
-      setInvoices(Array.isArray(d) ? d : [])
+    Promise.all([
+      fetch('/api/invoices').then(r => r.json()),
+      fetch('/api/company-settings').then(r => r.json()),
+    ]).then(([inv, s]) => {
+      setInvoices(Array.isArray(inv) ? inv : [])
+      setSettings(s)
       setLoading(false)
     })
   }
@@ -56,13 +65,14 @@ export default function InvoicesPage() {
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
     return invoices.filter(inv => {
-      if (!q) return true
       const b = inv.bookings
+      if (typeFilter && inv.type !== typeFilter) return false
+      if (!q) return true
       return (inv.invoice_number||'').toLowerCase().includes(q)
         || (b?.guest_name||'').toLowerCase().includes(q)
         || (b?.house_name||'').toLowerCase().includes(q)
     })
-  }, [invoices, search])
+  }, [invoices, search, typeFilter])
 
   const gaps = useMemo(() => findGaps(invoices), [invoices])
   const dupNrs = useMemo(() => {
@@ -70,6 +80,40 @@ export default function InvoicesPage() {
     invoices.forEach(inv => { if (inv.invoice_number) count[inv.invoice_number] = (count[inv.invoice_number]||0)+1 })
     return new Set(Object.keys(count).filter(k => count[k]>1))
   }, [invoices])
+
+  const hasStorno = (inv: any) =>
+    invoices.some(i => i.reference_invoice_id === inv.id && i.type === 'storno')
+
+  const handleReprint = async (inv: any) => {
+    if (!inv.data) { alert('Keine gespeicherten PDF-Daten.'); return }
+    await exportInvoiceFromData(inv.data)
+  }
+
+  const handleStorno = (inv: any) => {
+    const stornoNum = window.prompt('Rechnungsnummer für Stornorechnung:', `${inv.invoice_number || ''}-S`)
+    if (!stornoNum) return
+    const data = buildStornoPreviewData(
+      { id: inv.id, invoice_number: inv.invoice_number, invoice_date: inv.invoice_date, data: inv.data || {} },
+      stornoNum.trim(),
+      inv.lang || 'de'
+    )
+    setModal({ data, bookingId: inv.booking_id })
+  }
+
+  const handleModalChange = (field: string, value: any) => {
+    setModal((prev: any) => prev ? { ...prev, data: { ...prev.data, [field]: value } } : prev)
+  }
+
+  const handleModalLangChange = (lang: string) => {
+    if (!modal) return
+    const existing = modal.data
+    const refreshed = buildStornoPreviewData(
+      { id: existing._reference_invoice_id, invoice_number: existing._reference_invoice_number, invoice_date: existing.invoice_date, data: existing },
+      existing.invoice_number,
+      lang
+    )
+    setModal((prev: any) => ({ ...prev, data: { ...refreshed, invoice_number: existing.invoice_number } }))
+  }
 
   return (
     <div className="p-6 space-y-4">
@@ -92,8 +136,14 @@ export default function InvoicesPage() {
         <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-sm text-green-700">✅ Keine Lücken oder Duplikate.</div>
       )}
 
-      <div className="flex gap-3">
-        <input className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Suche nach Nr., Gast, Haus…" value={search} onChange={e=>setSearch(e.target.value)} />
+      <div className="flex gap-3 flex-wrap">
+        <input className="flex-1 min-w-[200px] border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Suche nach Nr., Gast, Haus…" value={search} onChange={e=>setSearch(e.target.value)} />
+        <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white" value={typeFilter} onChange={e=>setTypeFilter(e.target.value)}>
+          <option value="">Alle Typen</option>
+          <option value="normal">Normal</option>
+          <option value="partial">Teilrechnung</option>
+          <option value="storno">Storno</option>
+        </select>
       </div>
 
       {loading ? <div className="text-center py-12 text-gray-400">Laden…</div> : (
@@ -102,8 +152,8 @@ export default function InvoicesPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
                 <tr>
-                  {['Rechnungsnr.','Typ','Haus','Gast','Datum','Betrag','Buchungsstatus',''].map(h => (
-                    <th key={h} className="px-4 py-2 text-left">{h}</th>
+                  {['Rechnungsnr.','Typ','Haus','Gast','Datum','Betrag','Buchungsstatus','Aktionen'].map(h => (
+                    <th key={h} className="px-4 py-2 text-left whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -113,25 +163,44 @@ export default function InvoicesPage() {
                   const isDupe = dupNrs.has(inv.invoice_number)
                   return (
                     <tr key={inv.id} className={`border-t border-gray-50 hover:bg-gray-50 ${isDupe?'bg-red-50 hover:bg-red-100':''}`}>
-                      <td className="px-4 py-2 font-mono">
+                      <td className="px-4 py-2 font-mono whitespace-nowrap">
                         {inv.invoice_number}
-                        {inv.is_manual && <span className="ml-1 text-xs" title="Manuell">✍️</span>}
+                        {inv.manual && <span className="ml-1 text-xs" title="Manuell">✍️</span>}
                         {isDupe && <span className="ml-1 text-xs text-red-600">⚠ Duplikat</span>}
                       </td>
                       <td className="px-4 py-2">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${TYPE_COLOR[inv.invoice_type]||'bg-gray-100 text-gray-600'}`}>
-                          {TYPE_LABEL[inv.invoice_type]||inv.invoice_type}
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${TYPE_COLOR[inv.type]||'bg-gray-100 text-gray-600'}`}>
+                          {TYPE_LABEL[inv.type]||inv.type||'—'}
                         </span>
+                        {inv.reference_invoice_number && (
+                          <div className="text-xs text-gray-400 mt-0.5">→ {inv.reference_invoice_number}</div>
+                        )}
                       </td>
-                      <td className="px-4 py-2">{b?.house_name||'—'}</td>
-                      <td className="px-4 py-2">{b?.guest_name||'—'}</td>
-                      <td className="px-4 py-2 whitespace-nowrap">{fmtDate(inv.created_at)}</td>
-                      <td className="px-4 py-2 text-right">{fmtEur(parseFloat(inv.amount||0))}</td>
+                      <td className="px-4 py-2 whitespace-nowrap">{b?.house_name||'—'}</td>
+                      <td className="px-4 py-2 whitespace-nowrap">{b?.guest_name||'—'}</td>
+                      <td className="px-4 py-2 whitespace-nowrap">{fmtDate(inv.invoice_date||inv.created_at)}</td>
+                      <td className="px-4 py-2 text-right font-medium whitespace-nowrap">{fmtEur(parseFloat(inv.brutto_total||0))}</td>
                       <td className="px-4 py-2">
                         {b?.status && <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[b.status]||'bg-gray-100 text-gray-500'}`}>{STATUS_LABEL[b.status]||b.status}</span>}
                       </td>
-                      <td className="px-4 py-2 text-right">
-                        {b?.id && <button className="text-xs border border-gray-200 rounded-lg px-2 py-1 hover:bg-gray-50" onClick={() => router.push(`/bookings/${b.id}/edit`)}>✏️ Buchung</button>}
+                      <td className="px-4 py-2">
+                        <div className="flex gap-1.5 justify-end flex-wrap">
+                          {inv.data && (
+                            <button className="text-xs border border-gray-200 rounded-lg px-2 py-1 hover:bg-gray-50 whitespace-nowrap" onClick={() => handleReprint(inv)}>
+                              📄 PDF
+                            </button>
+                          )}
+                          {(inv.type === 'normal' || inv.type === 'partial') && !hasStorno(inv) && (
+                            <button className="text-xs border border-red-200 text-red-600 rounded-lg px-2 py-1 hover:bg-red-50 whitespace-nowrap" onClick={() => handleStorno(inv)}>
+                              🔴 Storno
+                            </button>
+                          )}
+                          {b?.id && (
+                            <button className="text-xs border border-gray-200 rounded-lg px-2 py-1 hover:bg-gray-50 whitespace-nowrap" onClick={() => router.push(`/bookings/${b.id}`)}>
+                              ✏️ Buchung
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   )
@@ -143,6 +212,17 @@ export default function InvoicesPage() {
             </table>
           </div>
         </div>
+      )}
+
+      {modal && (
+        <InvoicePreviewModal
+          data={modal.data}
+          settings={settings}
+          onClose={() => { setModal(null); load() }}
+          onLangChange={handleModalLangChange}
+          onChange={handleModalChange}
+          onRecorded={load}
+        />
       )}
     </div>
   )
