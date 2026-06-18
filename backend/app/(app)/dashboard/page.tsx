@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import { exportDashboardPDF } from '../utils/pdfReport'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   LineChart, Line, CartesianGrid, Legend, Cell, ReferenceLine, ComposedChart,
@@ -108,6 +109,11 @@ export default function DashboardPage() {
   const [syncModeModal, setSyncModeModal] = useState(false)
   const [excludeLongStay, setExcludeLongStay] = useState(false)
   const [longStayThreshold, setLongStayThreshold] = useState(28)
+  const [companyName, setCompanyName] = useState('Workation Wolfsburg')
+
+  useEffect(() => {
+    fetch('/api/company-settings').then(r=>r.json()).then(d=>{ if(d?.company_name) setCompanyName(d.company_name) }).catch(()=>{})
+  }, [])
 
   useEffect(() => {
     Promise.all([
@@ -339,7 +345,30 @@ export default function DashboardPage() {
     fetch('/api/bookings?limit=1000').then(r=>r.json()).then(d=>setBookings(d.data??[]))
   }
 
-  const handlePrint = () => window.print()
+  const handlePrint = () => {
+    const kpiList = kpis ? [
+      { label: 'Auslastung',    value: fmtPct(kpis.occupancyRate),  sub: `${kpis.totalNights} Nächte belegt`,      color: [29,78,216]  as [number,number,number] },
+      { label: 'Umsatz',        value: fmtEur(kpis.totalRevenue),   sub: `${kpis.confirmedBookings} Buchungen`,    color: [22,163,74]  as [number,number,number] },
+      { label: 'ADR',           value: fmtEur(kpis.adr),            sub: 'Ø Tagespreis (belegte Nächte)',          color: [124,58,237] as [number,number,number] },
+      { label: 'RevPAR',        value: fmtEur(kpis.revpar),         sub: 'Umsatz / alle verf. Nächte',            color: [245,158,11] as [number,number,number] },
+      { label: 'Ø Aufenthalt',  value: `${kpis.avgLos} Nächte`,    sub: 'Length of Stay',                        color: [29,78,216]  as [number,number,number] },
+      { label: 'Ø Vorlaufzeit', value: `${kpis.avgLeadTime} Tage`, sub: 'Lead Time',                             color: [124,58,237] as [number,number,number] },
+      { label: 'Stornoquote',   value: fmtPct(kpis.cancellationRate), sub: `${kpis.cancellations} Stornos`,       color: [220,38,38]  as [number,number,number] },
+      { label: 'Stammgäste',   value: String(kpis.returningGuests), sub: 'Wiederholungsbuchungen',               color: [22,163,74]  as [number,number,number] },
+      { label: 'Net ADR',       value: fmtEur(kpis.netAdr),         sub: 'Bereinigter ADR',                       color: [245,158,11] as [number,number,number] },
+      { label: 'Trail. Ausl.', value: fmtPct(trailingOccupancy),   sub: 'Letzte 90 Tage',                        color: [13,148,136] as [number,number,number] },
+    ] : []
+    exportDashboardPDF({
+      companyName,
+      from,
+      to,
+      kpis: kpiList,
+      monthly,
+      cashflow,
+      weekdayStats,
+      houseData,
+    })
+  }
 
   // Reusable compact table helper
   const CT = ({ heads, rows }: { heads: string[], rows: (string|number|null)[][] }) => (

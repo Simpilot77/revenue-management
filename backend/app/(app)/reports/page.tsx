@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useMemo } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line, CartesianGrid, ComposedChart } from 'recharts'
+import { exportReportsPDF } from '../utils/pdfReport'
 export const dynamic = 'force-dynamic'
 
 const MONTHS = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez']
@@ -226,7 +227,15 @@ export default function ReportsPage() {
           {excludeLongStay && <p className="text-xs text-amber-600 mt-0.5">⚠️ {longStayCount} Langzeitbuchung(en) &gt; {longStayThreshold} Nächte ausgeblendet</p>}
         </div>
         <div className="flex gap-2 flex-wrap items-end">
-          <button onClick={()=>window.print()} className="btn-secondary flex items-center gap-1.5 no-print">🖨️ PDF / Drucken</button>
+          <button onClick={()=>exportReportsPDF({
+            companyName: 'Workation Wolfsburg',
+            from, to,
+            tab, tabName: TABS[tab],
+            monthly, occupancyByHouse, byHouse, byChannel,
+            weekdayStats,
+            rows: sortedBookings,
+            houses,
+          })} className="btn-secondary flex items-center gap-1.5 no-print">⬇️ PDF exportieren</button>
           {/* Year quick-pick */}
           <div>
             <label className="block text-xs text-gray-400 mb-1">Schnellwahl</label>
