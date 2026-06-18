@@ -134,11 +134,12 @@ export default function ReportsPage() {
     for (let d = new Date(from); d <= new Date(to); d.setDate(d.getDate()+1)) totalDow[germanDow(d)]++
     const availDow = totalDow.map(n => n * houseCount)
 
-    const bookedDow  = [0,0,0,0,0,0,0]
-    const revDow     = [0,0,0,0,0,0,0]
-    const checkinDow = [0,0,0,0,0,0,0]
-    const losSumDow  = [0,0,0,0,0,0,0]
-    const losCntDow  = [0,0,0,0,0,0,0]
+    const bookedDow   = [0,0,0,0,0,0,0]
+    const revDow      = [0,0,0,0,0,0,0]
+    const checkinDow  = [0,0,0,0,0,0,0]
+    const bookingDow  = [0,0,0,0,0,0,0]
+    const losSumDow   = [0,0,0,0,0,0,0]
+    const losCntDow   = [0,0,0,0,0,0,0]
 
     active.forEach(b => {
       const ci = new Date(b.checkin_date), co = new Date(b.checkout_date)
@@ -155,9 +156,13 @@ export default function ReportsPage() {
         const dow = germanDow(ci)
         checkinDow[dow]++; losSumDow[dow]+=nights; losCntDow[dow]++
       }
+      if (b.booking_date) {
+        bookingDow[germanDow(new Date(b.booking_date))]++
+      }
     })
 
     const totalCheckins = checkinDow.reduce((s,n)=>s+n,0)
+    const totalBookings = bookingDow.reduce((s,n)=>s+n,0)
 
     const ltBuckets = [{l:'0–7d',mn:0,mx:7},{l:'8–14d',mn:8,mx:14},{l:'15–30d',mn:15,mx:30},{l:'31–60d',mn:31,mx:60},{l:'61–90d',mn:61,mx:90},{l:'91+d',mn:91,mx:9999}]
     const ltData = ltBuckets.map(({l,mn,mx}) => {
@@ -174,11 +179,13 @@ export default function ReportsPage() {
     return {
       byDow: DOW_NAMES.map((name,i) => ({
         name,
-        hitRate:    availDow[i]>0   ? +(bookedDow[i]/availDow[i]*100).toFixed(1) : 0,
-        checkinPct: totalCheckins>0  ? +(checkinDow[i]/totalCheckins*100).toFixed(1) : 0,
-        avgLos:     losCntDow[i]>0  ? +(losSumDow[i]/losCntDow[i]).toFixed(1) : 0,
-        adr:        bookedDow[i]>0  ? Math.round(revDow[i]/bookedDow[i]) : 0,
-        netAdr:     availDow[i]>0   ? Math.round(revDow[i]/availDow[i]) : 0,
+        hitRate:      availDow[i]>0    ? +(bookedDow[i]/availDow[i]*100).toFixed(1) : 0,
+        checkinPct:   totalCheckins>0   ? +(checkinDow[i]/totalCheckins*100).toFixed(1) : 0,
+        bookingPct:   totalBookings>0   ? +(bookingDow[i]/totalBookings*100).toFixed(1) : 0,
+        bookingCount: bookingDow[i],
+        avgLos:       losCntDow[i]>0   ? +(losSumDow[i]/losCntDow[i]).toFixed(1) : 0,
+        adr:          bookedDow[i]>0   ? Math.round(revDow[i]/bookedDow[i]) : 0,
+        netAdr:       availDow[i]>0    ? Math.round(revDow[i]/availDow[i]) : 0,
         bookedNights: bookedDow[i],
         totalNights:  availDow[i],
         checkins:     checkinDow[i],
@@ -486,20 +493,22 @@ export default function ReportsPage() {
                 <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
                   <h2 className="font-semibold text-gray-800 mb-1">Belegung & Check-in-Verteilung</h2>
                   <p className="text-xs text-gray-400 mb-3">
-                    <span className="text-blue-600 font-medium">Hit Rate</span> = belegte / verfügbare Nächte des Wochentags ·
-                    <span className="text-green-600 font-medium ml-1">Check-in %</span> = Anteil Anreisen
+                    <span className="text-blue-600 font-medium">Hit Rate</span> = belegte / verfügbare Nächte ·
+                    <span className="text-green-600 font-medium ml-1">Check-in %</span> = Anteil Anreisen ·
+                    <span className="text-violet-600 font-medium ml-1">Buchung %</span> = an welchem Tag gebucht
                   </p>
                   <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={weekdayStats.byDow} barCategoryGap="20%">
+                    <BarChart data={weekdayStats.byDow} barCategoryGap="15%">
                       <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                       <XAxis dataKey="name" tick={{fontSize:12}} />
                       <YAxis tickFormatter={v=>`${v}%`} tick={{fontSize:10}} domain={[0,100]} />
-                      <Tooltip formatter={(v:any,name:any)=>[`${v}%`,name==='hitRate'?'Hit Rate':'Check-in %']} />
-                      <Legend formatter={(v:string)=>v==='hitRate'?'Hit Rate (Belegung)':'Check-in %'} wrapperStyle={{fontSize:11}} />
+                      <Tooltip formatter={(v:any,name:any)=>[`${v}%`,name==='hitRate'?'Hit Rate':name==='checkinPct'?'Check-in %':'Buchung %']} />
+                      <Legend formatter={(v:string)=>v==='hitRate'?'Hit Rate (Belegung)':v==='checkinPct'?'Check-in %':'Buchung %'} wrapperStyle={{fontSize:11}} />
                       <Bar dataKey="hitRate" radius={[4,4,0,0]} name="hitRate">
                         {weekdayStats.byDow.map((d,i)=><Cell key={i} fill={d.hitRate>=70?'#16a34a':d.hitRate>=50?'#2563eb':d.hitRate>=30?'#f59e0b':'#dc2626'} />)}
                       </Bar>
                       <Bar dataKey="checkinPct" fill="#10b981" radius={[4,4,0,0]} name="checkinPct" opacity={0.7} />
+                      <Bar dataKey="bookingPct" fill="#7c3aed" radius={[4,4,0,0]} name="bookingPct" opacity={0.7} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -567,7 +576,7 @@ export default function ReportsPage() {
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50 border-b">
                       <tr>
-                        {['Wochentag','Hit Rate','Check-in %','Anreisen','Bel. Nächte','Verf. Nächte','ADR','Net ADR','Ø LOS'].map(h=>(
+                        {['Wochentag','Hit Rate','Check-in %','Buchung %','Buchungen','Anreisen','Bel. Nächte','Verf. Nächte','ADR','Net ADR','Ø LOS'].map(h=>(
                           <th key={h} className="px-4 py-2 text-left text-xs text-gray-500 uppercase whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
@@ -582,6 +591,8 @@ export default function ReportsPage() {
                             </span>
                           </td>
                           <td className="px-4 py-2 text-gray-700">{d.checkinPct} %</td>
+                          <td className="px-4 py-2 font-medium text-violet-700">{d.bookingPct} %</td>
+                          <td className="px-4 py-2 text-gray-700">{d.bookingCount}</td>
                           <td className="px-4 py-2 text-gray-700">{d.checkins}</td>
                           <td className="px-4 py-2 text-gray-700">{d.bookedNights}</td>
                           <td className="px-4 py-2 text-gray-500">{d.totalNights}</td>

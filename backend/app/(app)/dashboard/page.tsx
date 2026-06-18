@@ -190,11 +190,12 @@ export default function DashboardPage() {
     for (let d = new Date(from); d <= endD; d.setDate(d.getDate()+1)) totalDow[germanDow(d)]++
     const availDow = totalDow.map(n => n * houseCount)
 
-    const bookedDow = [0,0,0,0,0,0,0]
-    const revDow    = [0,0,0,0,0,0,0]
-    const checkinDow= [0,0,0,0,0,0,0]
-    const losSumDow = [0,0,0,0,0,0,0]
-    const losCntDow = [0,0,0,0,0,0,0]
+    const bookedDow   = [0,0,0,0,0,0,0]
+    const revDow      = [0,0,0,0,0,0,0]
+    const checkinDow  = [0,0,0,0,0,0,0]
+    const bookingDow  = [0,0,0,0,0,0,0] // day booking was made
+    const losSumDow   = [0,0,0,0,0,0,0]
+    const losCntDow   = [0,0,0,0,0,0,0]
 
     active.forEach(b => {
       const ci = new Date(b.checkin_date), co = new Date(b.checkout_date)
@@ -215,9 +216,14 @@ export default function DashboardPage() {
         losSumDow[dow] += nights
         losCntDow[dow]++
       }
+      // booking day (day the reservation was placed)
+      if (b.booking_date) {
+        bookingDow[germanDow(new Date(b.booking_date))]++
+      }
     })
 
     const totalCheckins = checkinDow.reduce((s,n)=>s+n,0)
+    const totalBookings = bookingDow.reduce((s,n)=>s+n,0)
 
     // Lead time → ADR buckets
     const ltBuckets = [{l:'0–7d',mn:0,mx:7},{l:'8–14d',mn:8,mx:14},{l:'15–30d',mn:15,mx:30},{l:'31–60d',mn:31,mx:60},{l:'61–90d',mn:61,mx:90},{l:'91+d',mn:91,mx:9999}]
@@ -235,11 +241,13 @@ export default function DashboardPage() {
     return {
       byDow: DOW_NAMES.map((name,i) => ({
         name,
-        hitRate:    availDow[i]>0   ? +(bookedDow[i]/availDow[i]*100).toFixed(1) : 0,
-        checkinPct: totalCheckins>0  ? +(checkinDow[i]/totalCheckins*100).toFixed(1) : 0,
-        avgLos:     losCntDow[i]>0  ? +(losSumDow[i]/losCntDow[i]).toFixed(1) : 0,
-        adr:        bookedDow[i]>0  ? Math.round(revDow[i]/bookedDow[i]) : 0,
-        netAdr:     availDow[i]>0   ? Math.round(revDow[i]/availDow[i]) : 0,
+        hitRate:     availDow[i]>0    ? +(bookedDow[i]/availDow[i]*100).toFixed(1) : 0,
+        checkinPct:  totalCheckins>0   ? +(checkinDow[i]/totalCheckins*100).toFixed(1) : 0,
+        bookingPct:  totalBookings>0   ? +(bookingDow[i]/totalBookings*100).toFixed(1) : 0,
+        bookingCount: bookingDow[i],
+        avgLos:      losCntDow[i]>0   ? +(losSumDow[i]/losCntDow[i]).toFixed(1) : 0,
+        adr:         bookedDow[i]>0   ? Math.round(revDow[i]/bookedDow[i]) : 0,
+        netAdr:      availDow[i]>0    ? Math.round(revDow[i]/availDow[i]) : 0,
         bookedNights: bookedDow[i],
         totalNights:  availDow[i],
       })),
@@ -647,21 +655,23 @@ export default function DashboardPage() {
                 <h3 className="font-semibold text-gray-800 mb-0.5">Belegung & Check-in-Verteilung je Wochentag</h3>
                 <p className="text-xs text-gray-400 mb-3">
                   <span className="text-blue-600 font-medium">Hit Rate</span> = Anteil belegter Nächte ·
-                  <span className="text-green-600 font-medium ml-1">Check-in %</span> = Anteil der Anreisen
+                  <span className="text-green-600 font-medium ml-1">Check-in %</span> = Anteil der Anreisen ·
+                  <span className="text-violet-600 font-medium ml-1">Buchung %</span> = an welchem Tag wurde gebucht
                 </p>
                 <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={weekdayStats.byDow} margin={{top:0,right:0,left:0,bottom:0}} barCategoryGap="20%">
+                  <BarChart data={weekdayStats.byDow} margin={{top:0,right:0,left:0,bottom:0}} barCategoryGap="15%">
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis dataKey="name" tick={{fontSize:12}} />
                     <YAxis tickFormatter={v=>`${v}%`} tick={{fontSize:11}} domain={[0,100]} />
-                    <Tooltip formatter={(v:any,name:any)=>[`${v}%`, name==='hitRate'?'Hit Rate':'Check-in %']} labelStyle={{fontWeight:600}} />
-                    <Legend formatter={(v:string)=>v==='hitRate'?'Hit Rate (Belegung)':'Check-in %'} wrapperStyle={{fontSize:11}} />
+                    <Tooltip formatter={(v:any,name:any)=>[`${v}%`, name==='hitRate'?'Hit Rate':name==='checkinPct'?'Check-in %':'Buchung %']} labelStyle={{fontWeight:600}} />
+                    <Legend formatter={(v:string)=>v==='hitRate'?'Hit Rate (Belegung)':v==='checkinPct'?'Check-in %':'Buchung %'} wrapperStyle={{fontSize:11}} />
                     <Bar dataKey="hitRate" fill="#2563eb" radius={[4,4,0,0]} name="hitRate">
                       {weekdayStats.byDow.map((d,i)=>(
                         <Cell key={i} fill={d.hitRate>=70?'#16a34a':d.hitRate>=50?'#2563eb':d.hitRate>=30?'#f59e0b':'#dc2626'} />
                       ))}
                     </Bar>
                     <Bar dataKey="checkinPct" fill="#10b981" radius={[4,4,0,0]} name="checkinPct" opacity={0.75} />
+                    <Bar dataKey="bookingPct" fill="#7c3aed" radius={[4,4,0,0]} name="bookingPct" opacity={0.7} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -731,7 +741,7 @@ export default function DashboardPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-100 text-xs text-gray-500 uppercase">
-                      {['Tag','Hit Rate','Check-in %','Bel. Nächte','Verf. Nächte','ADR','Net ADR','Ø LOS'].map(h=>(
+                      {['Tag','Hit Rate','Check-in %','Buchung %','Buchungen','Bel. Nächte','Verf. Nächte','ADR','Net ADR','Ø LOS'].map(h=>(
                         <th key={h} className="text-left pb-2 pr-4 whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -746,6 +756,8 @@ export default function DashboardPage() {
                           </span>
                         </td>
                         <td className="py-2 pr-4 text-gray-700">{d.checkinPct} %</td>
+                        <td className="py-2 pr-4 text-violet-700 font-medium">{d.bookingPct} %</td>
+                        <td className="py-2 pr-4 text-gray-700">{d.bookingCount}</td>
                         <td className="py-2 pr-4 text-gray-700">{d.bookedNights}</td>
                         <td className="py-2 pr-4 text-gray-700">{d.totalNights}</td>
                         <td className="py-2 pr-4 text-gray-700">{d.adr>0?fmtEur(d.adr):'–'}</td>
