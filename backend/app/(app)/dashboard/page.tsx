@@ -183,9 +183,12 @@ export default function DashboardPage() {
 
   // Weekday analytics
   const weekdayStats = useMemo(() => {
+    const houseCount = Math.max(1, houses.length)
+    // totalDow × houseCount = total available "slots" per weekday across all houses
     const totalDow = [0,0,0,0,0,0,0]
     const endD = new Date(to)
     for (let d = new Date(from); d <= endD; d.setDate(d.getDate()+1)) totalDow[germanDow(d)]++
+    const availDow = totalDow.map(n => n * houseCount)
 
     const bookedDow = [0,0,0,0,0,0,0]
     const revDow    = [0,0,0,0,0,0,0]
@@ -232,13 +235,13 @@ export default function DashboardPage() {
     return {
       byDow: DOW_NAMES.map((name,i) => ({
         name,
-        hitRate:    totalDow[i]>0   ? +(bookedDow[i]/totalDow[i]*100).toFixed(1) : 0,
+        hitRate:    availDow[i]>0   ? +(bookedDow[i]/availDow[i]*100).toFixed(1) : 0,
         checkinPct: totalCheckins>0  ? +(checkinDow[i]/totalCheckins*100).toFixed(1) : 0,
         avgLos:     losCntDow[i]>0  ? +(losSumDow[i]/losCntDow[i]).toFixed(1) : 0,
         adr:        bookedDow[i]>0  ? Math.round(revDow[i]/bookedDow[i]) : 0,
-        netAdr:     totalDow[i]>0   ? Math.round(revDow[i]/totalDow[i]) : 0,
+        netAdr:     availDow[i]>0   ? Math.round(revDow[i]/availDow[i]) : 0,
         bookedNights: bookedDow[i],
-        totalNights:  totalDow[i],
+        totalNights:  availDow[i],
       })),
       ltData,
     }
