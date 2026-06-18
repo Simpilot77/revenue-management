@@ -136,3 +136,33 @@ body {
   background-position: 0 0, 100% 0, 0 0, 100% 0;
   background-attachment: local, local, scroll, scroll;
 }
+
+/* ── Print / PDF ─────────────────────────────────────────────────────────── */
+@media print {
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+  /* Hide navigation, controls, modals */
+  aside, .no-print { display: none !important; }
+
+  /* Full width without sidebar gap */
+  body { background: white !important; }
+  main { margin-left: 0 !important; padding: 0 !important; }
+  .p-6 { padding: 0.75rem !important; }
+
+  /* Cards stay compact */
+  .card { box-shadow: none !important; border: 1px solid #e5e7eb !important; break-inside: avoid; }
+  .kpi-card { break-inside: avoid; }
+
+  /* Page title block */
+  .print-header { display: block !important; }
+
+  /* Section breaks */
+  .print-break { break-before: page; }
+
+  /* Recharts SVGs print at full size */
+  .recharts-wrapper svg { max-width: 100% !important; }
+
+  /* Compact chart tables */
+  .chart-table { font-size: 0.65rem !important; }
+  .chart-table th, .chart-table td { padding: 2px 6px !important; }
+}

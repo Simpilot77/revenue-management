@@ -219,6 +219,7 @@ export default function ReportsPage() {
           {excludeLongStay && <p className="text-xs text-amber-600 mt-0.5">⚠️ {longStayCount} Langzeitbuchung(en) &gt; {longStayThreshold} Nächte ausgeblendet</p>}
         </div>
         <div className="flex gap-2 flex-wrap items-end">
+          <button onClick={()=>window.print()} className="btn-secondary flex items-center gap-1.5 no-print">🖨️ PDF / Drucken</button>
           {/* Year quick-pick */}
           <div>
             <label className="block text-xs text-gray-400 mb-1">Schnellwahl</label>
@@ -245,7 +246,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Langzeitbuchungen Filter */}
-      <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex flex-wrap items-center gap-4">
+      <div className="no-print bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex flex-wrap items-center gap-4">
         <label className="flex items-center gap-2 text-sm cursor-pointer font-medium text-amber-800">
           <input type="checkbox" checked={excludeLongStay} onChange={e=>setExcludeLongStay(e.target.checked)} className="rounded" />
           Langzeitbuchungen ausschließen
@@ -276,7 +277,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
+      <div className="no-print flex gap-1 border-b border-gray-200 overflow-x-auto">
         {TABS.map((t,i)=>(
           <button key={i} onClick={()=>setTab(i)}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${tab===i?'border-blue-600 text-blue-700':'-mb-px border-transparent text-gray-500 hover:text-gray-800'}`}>

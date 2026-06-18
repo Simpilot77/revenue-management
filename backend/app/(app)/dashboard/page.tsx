@@ -331,6 +331,28 @@ export default function DashboardPage() {
     fetch('/api/bookings?limit=1000').then(r=>r.json()).then(d=>setBookings(d.data??[]))
   }
 
+  const handlePrint = () => window.print()
+
+  // Reusable compact table helper
+  const CT = ({ heads, rows }: { heads: string[], rows: (string|number|null)[][] }) => (
+    <div className="overflow-x-auto mt-3">
+      <table className="chart-table w-full text-xs border-collapse">
+        <thead>
+          <tr className="bg-gray-50 border-b border-gray-200">
+            {heads.map(h=><th key={h} className="px-3 py-1.5 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r,i)=>(
+            <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
+              {r.map((cell,j)=><td key={j} className="px-3 py-1 text-gray-700 whitespace-nowrap">{cell??'–'}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">Daten werden geladen…</div>
 
   return (
@@ -348,17 +370,18 @@ export default function DashboardPage() {
           <input type="date" className="form-input" style={{width:'9rem'}} value={from} onChange={e=>setFrom(e.target.value)} />
           <label className="text-xs text-gray-500">Bis</label>
           <input type="date" className="form-input" style={{width:'9rem'}} value={to} onChange={e=>setTo(e.target.value)} />
-          <button onClick={()=>setSyncModeModal(true)} disabled={syncing} className="btn-secondary flex items-center gap-1.5">
+          <button onClick={()=>setSyncModeModal(true)} disabled={syncing} className="btn-secondary flex items-center gap-1.5 no-print">
             {syncing?'⏳':'🔄'} Lodgify Import
           </button>
-          <a href="/bookings/new" className="btn-primary">+ Neue Buchung</a>
+          <button onClick={handlePrint} className="btn-secondary flex items-center gap-1.5 no-print">🖨️ PDF / Drucken</button>
+          <a href="/bookings/new" className="btn-primary no-print">+ Neue Buchung</a>
         </div>
       </div>
 
       {syncMsg && <div className={`text-sm px-4 py-2 rounded-lg ${syncMsg.startsWith('✅')?'bg-green-50 text-green-700':'bg-red-50 text-red-700'}`}>{syncMsg}</div>}
 
       {/* Langzeitbuchungen Filter */}
-      <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex flex-wrap items-center gap-4">
+      <div className="no-print bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex flex-wrap items-center gap-4">
         <label className="flex items-center gap-2 text-sm cursor-pointer font-medium text-amber-800">
           <input type="checkbox" checked={excludeLongStay} onChange={e=>setExcludeLongStay(e.target.checked)} className="rounded" />
           Langzeitbuchungen ausschließen
@@ -530,6 +553,28 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* Monthly summary table */}
+          <div className="card">
+            <h3 className="font-semibold text-gray-800 text-sm mb-2">Monatliche Übersicht</h3>
+            <CT
+              heads={['Monat','Buchungen','Nächte','Auslastung','Umsatz','ADR','RevPAR']}
+              rows={monthly.map(m => {
+                const [y,mo] = m.month.split('-').map(Number)
+                const dim = new Date(y, mo, 0).getDate()
+                const hc = houses.length || 1
+                return [
+                  m.monthLabel,
+                  m.count,
+                  m.nights,
+                  `${m.occupancyRate} %`,
+                  fmtEur(m.revenue),
+                  m.nights>0 ? fmtEur(m.revenue/m.nights) : '–',
+                  fmtEur(m.revenue / (hc * dim)),
+                ]
+              })}
+            />
+          </div>
+
           {/* Cashflow */}
           <div className="card">
             <div className="mb-1">
@@ -547,6 +592,10 @@ export default function DashboardPage() {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+            <CT
+              heads={['Monat','Cashflow','Zahlungen']}
+              rows={cashflow.map(m=>[m.monthLabel, fmtEur(m.cashflow), m.payments])}
+            />
           </div>
 
           {/* Lead time & LOS */}
@@ -563,6 +612,10 @@ export default function DashboardPage() {
                   <Line type="monotone" dataKey="avg_lead_time" stroke="#8b5cf6" strokeWidth={2.5} dot={{r:4,fill:'#8b5cf6'}} name="Ø Vorlaufzeit" />
                 </LineChart>
               </ResponsiveContainer>
+              <CT
+                heads={['Monat','Ø Vorlaufzeit']}
+                rows={monthly.map(m=>[m.monthLabel, m.avg_lead_time>0?`${m.avg_lead_time} Tage`:'–'])}
+              />
             </div>
             <div className="card">
               <h2 className="font-semibold text-gray-800 mb-1">Ø Aufenthaltsdauer pro Monat</h2>
@@ -576,6 +629,10 @@ export default function DashboardPage() {
                   <Line type="monotone" dataKey="avg_los" stroke="#f59e0b" strokeWidth={2.5} dot={{r:4,fill:'#f59e0b'}} name="Ø Aufenthalt" />
                 </LineChart>
               </ResponsiveContainer>
+              <CT
+                heads={['Monat','Ø Aufenthalt']}
+                rows={monthly.map(m=>[m.monthLabel, m.avg_los>0?`${m.avg_los} Nächte`:'–'])}
+              />
             </div>
           </div>
 
