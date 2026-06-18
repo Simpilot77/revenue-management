@@ -721,26 +721,70 @@ function HouseCard({ house, bookings, tasks, today }: { house: any; bookings: an
 
   return (
     <>
-      {detailOpen && detailBooking && (
-        <div style={{ position:'fixed', inset:0, zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(0,0,0,0.45)' }} onClick={() => setDetailOpen(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full mx-4" style={{ maxWidth:480 }} onClick={e => e.stopPropagation()}>
-            <div className="bg-gradient-to-br from-blue-700 to-blue-900 rounded-t-2xl px-6 py-5 text-white relative">
-              <button onClick={() => setDetailOpen(false)} className="absolute top-4 right-4 text-white/70 hover:text-white text-xl">✕</button>
-              <div className="text-xs font-semibold opacity-70 uppercase tracking-wider mb-1">{house.name}</div>
-              <div className="text-xl font-bold">{detailBooking.guest_name}</div>
-            </div>
-            <div className="px-6 py-5 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-gray-50 rounded-xl p-3"><div className="text-xs text-gray-400 mb-1">Check-in</div><div className="text-sm font-semibold">{fmtDateFull(detailBooking.checkin_date)}</div></div>
-                <div className="bg-gray-50 rounded-xl p-3"><div className="text-xs text-gray-400 mb-1">Check-out</div><div className="text-sm font-semibold">{fmtDateFull(detailBooking.checkout_date)}</div></div>
+      {detailOpen && detailBooking && (() => {
+        const ci = detailBooking.checkin_date?.slice(0,10)||''
+        const co = detailBooking.checkout_date?.slice(0,10)||''
+        const todayStr = new Date().toISOString().slice(0,10)
+        const daysIn  = Math.round((new Date(todayStr).getTime()-new Date(ci).getTime())/86400000)
+        const daysOut = Math.round((new Date(co).getTime()-new Date(todayStr).getTime())/86400000)
+        const STATUS_COLORS: Record<string,string> = {
+          eingecheckt:'bg-green-100 text-green-800', ausgecheckt:'bg-gray-100 text-gray-700',
+          bestaetigt:'bg-blue-100 text-blue-800', angefragt:'bg-amber-100 text-amber-800', gesperrt:'bg-slate-100 text-slate-700'
+        }
+        const STATUS_LABELS: Record<string,string> = {
+          eingecheckt:'Eingecheckt', ausgecheckt:'Ausgecheckt', bestaetigt:'Bestätigt', angefragt:'Angefragt', gesperrt:'Gesperrt'
+        }
+        const detailTitle = activeBooking ? (occupied ? 'Aktuelle Buchung' : 'Angefragt') : 'Nächste Buchung'
+        const fmtCurr = (v: any) => new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(parseFloat(v||0))
+        return (
+          <div style={{ position:'fixed', inset:0, zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(0,0,0,0.45)' }} onClick={() => setDetailOpen(false)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full mx-4" style={{ maxWidth:480 }} onClick={e => e.stopPropagation()}>
+              <div className="bg-gradient-to-br from-blue-700 to-blue-900 rounded-t-2xl px-6 py-5 text-white relative">
+                <button onClick={() => setDetailOpen(false)} className="absolute top-4 right-4 text-white/70 hover:text-white text-xl leading-none">✕</button>
+                <div className="text-xs font-semibold opacity-70 uppercase tracking-wider mb-1">{house.name} · {detailTitle}</div>
+                <div className="text-xl font-bold">{detailBooking.guest_name}</div>
+                {detailBooking.company_name && <div className="text-sm opacity-80 mt-0.5">{detailBooking.company_name}</div>}
+                <div className={`mt-3 inline-flex items-center text-xs font-semibold px-3 py-1 rounded-full ${STATUS_COLORS[detailBooking.status]||'bg-white/20 text-white'}`}>
+                  {STATUS_LABELS[detailBooking.status]||detailBooking.status}
+                </div>
               </div>
-              <div className="flex justify-between text-sm"><span className="text-gray-400">Nächte</span><span className="font-medium">{detailBooking.nights}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-gray-400">Personen</span><span className="font-medium">{detailBooking.guest_count}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-gray-400">Gesamtpreis</span><span className="font-medium">{new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(parseFloat(detailBooking.total_price||0))}</span></div>
+              <div className="px-6 py-5 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-gray-50 rounded-xl p-3">
+                    <div className="text-xs text-gray-400 mb-1">Check-in</div>
+                    <div className="text-sm font-semibold text-gray-800">{fmtDateFull(ci)}</div>
+                    {daysIn >= 0 && daysIn < 30 && <div className="text-xs text-green-600 mt-0.5">{daysIn===0?'Heute':`Vor ${daysIn} Tag${daysIn!==1?'en':''}`}</div>}
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-3">
+                    <div className="text-xs text-gray-400 mb-1">Check-out</div>
+                    <div className="text-sm font-semibold text-gray-800">{fmtDateFull(co)}</div>
+                    {daysOut >= 0 && daysOut < 30 && <div className={`text-xs mt-0.5 ${daysOut===0?'text-red-600':daysOut===1?'text-amber-600':'text-gray-500'}`}>{daysOut===0?'Heute':daysOut===1?'Morgen':`in ${daysOut} Tagen`}</div>}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {([
+                    ['Nächte',      detailBooking.nights ? `${detailBooking.nights} Nächte` : '—'],
+                    ['Personen',    detailBooking.guest_count ? `${detailBooking.guest_count} Person${detailBooking.guest_count!==1?'en':''}` : '—'],
+                    ['Gesamtpreis', fmtCurr(detailBooking.total_price)],
+                    detailBooking.booking_channel && ['Kanal', detailBooking.booking_channel],
+                  ] as any[]).filter(Boolean).map(([label, value]: [string,string]) => (
+                    <div key={label} className="flex justify-between items-center text-sm">
+                      <span className="text-gray-400">{label}</span>
+                      <span className="font-medium text-gray-800">{value}</span>
+                    </div>
+                  ))}
+                </div>
+                {detailBooking.notes && (
+                  <div className="bg-amber-50 rounded-xl px-4 py-3 text-sm text-amber-900">
+                    <div className="text-xs font-semibold text-amber-600 mb-1">Notiz</div>
+                    {detailBooking.notes}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
       <div className="rounded-2xl overflow-hidden shadow-md ring-1 ring-gray-200 cursor-pointer hover:ring-blue-300 hover:shadow-lg transition-shadow" onClick={() => detailBooking && setDetailOpen(true)}>
         <div className="bg-gradient-to-br from-blue-700 to-blue-900 p-5 text-white relative">
           <div className="flex items-start justify-between">
@@ -748,10 +792,14 @@ function HouseCard({ house, bookings, tasks, today }: { house: any; bookings: an
             <div className="text-4xl drop-shadow-sm">{statusIcon}</div>
           </div>
           <div className={`mt-3 inline-flex items-center ${occupied_i} bg-opacity-80 border border-white/30 text-white rounded-full px-4 py-1.5 text-sm font-bold shadow-sm`}>{statusLabel}</div>
-          {activeBooking && (
+          {activeBooking ? (
             <div className="absolute bottom-3 right-4 text-xs opacity-80 text-right">
               <div>📅 {fmtDateFull(activeBooking.checkin_date)}</div>
               <div>🏁 {fmtDateFull(activeBooking.checkout_date)}</div>
+            </div>
+          ) : next && (
+            <div className="absolute bottom-3 right-4 text-xs opacity-80 text-right">
+              <div>📅 Ankunft: {fmtDateFull(next.checkin_date)}</div>
             </div>
           )}
         </div>
@@ -762,7 +810,7 @@ function HouseCard({ house, bookings, tasks, today }: { house: any; bookings: an
               <div className="flex items-center gap-2"><span className="text-xs text-gray-400 w-16">Gast</span><span className="text-sm font-semibold text-gray-800 truncate">{current.guest_name}</span></div>
               <div className="flex items-center gap-2"><span className="text-xs text-gray-400 w-16">Abreise</span><span className="text-sm font-medium text-red-700">{fmtDateFull(current.checkout_date)}</span><span className={`text-xs rounded-full px-2 py-0.5 ml-1 ${daysUntilFree===0?'bg-amber-100 text-amber-700':'bg-red-50 text-red-500'}`}>{daysUntilFree===0?'Heute':daysUntilFree===1?'Morgen':`in ${daysUntilFree} Tagen`}</span></div>
               <div className="flex items-center gap-2"><span className="text-xs text-gray-400 w-16">Reinigung</span>{cleaningDone?<span className="text-xs rounded-full px-2 py-0.5 bg-emerald-100 text-emerald-700">✅ Bestätigt</span>:cleaningOrg?<span className="text-xs rounded-full px-2 py-0.5 bg-yellow-100 text-yellow-700">🗓 Organisiert</span>:<span className="text-xs rounded-full px-2 py-0.5 bg-red-100 text-red-600">⚠ Noch organisieren</span>}</div>
-              {next && <div className="flex items-center gap-2"><span className="text-xs text-gray-400 w-16">Folge</span><span className="text-xs text-blue-700 font-medium">{next.guest_name}</span><span className="text-xs text-gray-400 ml-1">· {fmtDate2(next.checkin_date)}</span></div>}
+              {next && <div className="flex items-center gap-2"><span className="text-xs text-gray-400 w-16 shrink-0">Folgebuchung</span><span className="text-xs text-blue-700 font-medium truncate">{next.guest_name}</span><span className="text-xs text-gray-400 ml-1">· {fmtDate2(next.checkin_date)}</span>{daysUntilNext!==null&&<span className="text-xs text-blue-400 ml-1 shrink-0">(in {daysUntilNext}d)</span>}</div>}
             </>
           ) : (
             <>
