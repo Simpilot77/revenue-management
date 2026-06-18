@@ -1,5 +1,5 @@
 {
-  "synced_at": "2026-06-18T14:55:49.125694Z",
+  "synced_at": "2026-06-18T20:16:46.429387Z",
   "bookings": [
     {
       "id": 18588939,
@@ -3206,58 +3206,6 @@
       "deposit_returned": false,
       "created_by": 1,
       "included_in_stats": true
-    },
-    {
-      "id": 5144360,
-      "house_id": 1,
-      "house_name": "Modernes B2B-Teamhaus / 4SZ / 6 Pers. / Parkplatz / Rechnung",
-      "house_short": "A",
-      "house_capacity": 6,
-      "channel_id": 1,
-      "channel_name": "Direkt",
-      "channel_short": "DIREKT",
-      "channel_color": "#10b981",
-      "external_reference": "5144360",
-      "booking_date": "2026-06-18",
-      "checkin_date": "2026-06-23",
-      "checkout_date": "2026-06-24",
-      "nights": 1,
-      "guest_name": {
-        "first_name": null,
-        "last_name": null,
-        "full_name": ""
-      },
-      "company_name": null,
-      "guest_email": null,
-      "guest_phone": null,
-      "nationality": null,
-      "is_returning_guest": false,
-      "guest_count": 1,
-      "adults": 1,
-      "children": 0,
-      "daily_rate": 0,
-      "cleaning_fee": 0,
-      "discount_percent": 0,
-      "total_price": 0.0,
-      "currency": "EUR",
-      "payment_method": "ueberweisung",
-      "payment_status": "offen",
-      "invoice_number": null,
-      "status": "bestaetigt",
-      "is_owner_block": false,
-      "block_reason": null,
-      "cancellation_date": null,
-      "cancellation_reason": null,
-      "breakfast_included": false,
-      "pets_allowed": false,
-      "parking": true,
-      "guest_notes": null,
-      "internal_notes": null,
-      "guests_registered": false,
-      "deposit_taken": false,
-      "deposit_returned": false,
-      "created_by": 1,
-      "included_in_stats": true
     }
   ],
   "properties": [
@@ -3281,8 +3229,8 @@
     }
   ],
   "stats": {
-    "total": 57,
-    "reservations": 57,
+    "total": 56,
+    "reservations": 56,
     "owner_blocks": 0
   }
 }
