@@ -26,8 +26,13 @@ function overlapNights(checkin: string, checkout: string, year: number, month: n
 function germanDow(d: Date) { const j = d.getDay(); return j === 0 ? 6 : j - 1 }
 
 export default function ReportsPage() {
+  const now = new Date()
+  const cy = now.getFullYear()
   const [tab, setTab] = useState(0)
-  const [year, setYear] = useState(new Date().getFullYear())
+  const [from, setFrom] = useState(`${cy}-01-01`)
+  const [to, setTo]     = useState(`${cy}-12-31`)
+  const [excludeLongStay, setExcludeLongStay] = useState(false)
+  const [longStayThreshold, setLongStayThreshold] = useState(28)
   const [houses, setHouses] = useState<any[]>([])
   const [bookings, setBookings] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -35,47 +40,69 @@ export default function ReportsPage() {
   const [sortBy, setSortBy] = useState('checkin_date')
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc')
 
+  const setYear = (y: number) => { setFrom(`${y}-01-01`); setTo(`${y}-12-31`) }
+
   useEffect(() => { fetch('/api/houses').then(r=>r.json()).then(h=>setHouses(h.data??h)) }, [])
 
   useEffect(() => {
     setLoading(true)
-    const params = new URLSearchParams({ from:`${year}-01-01`, to:`${year}-12-31`, limit:'1000' })
+    const params = new URLSearchParams({ from, to, limit:'1000' })
     if (houseFilter) params.set('house_id', houseFilter)
     fetch(`/api/bookings?${params}`).then(r=>r.json()).then(d => { setBookings(d.data??[]); setLoading(false) })
-  }, [year, houseFilter])
+  }, [from, to, houseFilter])
 
-  const active = useMemo(() => bookings.filter(b => ['bestaetigt','eingecheckt','ausgecheckt'].includes(b.status)), [bookings])
+  const active = useMemo(() => {
+    const base = bookings.filter(b => ['bestaetigt','eingecheckt','ausgecheckt'].includes(b.status))
+    return excludeLongStay ? base.filter(b => (b.nights||0) <= longStayThreshold) : base
+  }, [bookings, excludeLongStay, longStayThreshold])
 
-  // ── Monthly ──────────────────────────────────────────────────────────────
+  // ── Monthly (spans full date range) ──────────────────────────────────────
   const monthly = useMemo(() => {
-    return Array.from({length:12},(_,mo) => {
-      const bs = active.filter(b => b.checkin_date && new Date(b.checkin_date).getMonth()===mo)
-      const revenue = bs.reduce((s,b)=>s+parseFloat(b.total_price||0),0)
-      const nights  = bs.reduce((s,b)=>s+(b.nights||0),0)
-      const days = daysInMonth(year, mo), houseCount = houses.length||1
-      const availableNights = days * houseCount
-      const occupancy = availableNights>0 ? (nights/availableNights)*100 : 0
-      const adr = nights>0 ? revenue/nights : 0
-      return { name:MONTHS[mo], month:mo, revenue, nights, bookings:bs.length, occupancy, adr, availableNights }
-    })
-  }, [active, year, houses])
+    const fy = parseInt(from.slice(0,4)), fm = parseInt(from.slice(5,7))
+    const ty = parseInt(to.slice(0,4)),   tm = parseInt(to.slice(5,7))
+    const months: any[] = []
+    for (let y = fy; y <= ty; y++) {
+      const mStart = y===fy ? fm : 1, mEnd = y===ty ? tm : 12
+      for (let mo = mStart; mo <= mEnd; mo++) {
+        const mo0 = mo - 1 // 0-indexed for daysInMonth
+        const days = daysInMonth(y, mo0)
+        const bs = active.filter(b => b.checkin_date &&
+          new Date(b.checkin_date).getFullYear()===y && new Date(b.checkin_date).getMonth()===mo0)
+        const revenue = bs.reduce((s,b)=>s+parseFloat(b.total_price||0),0)
+        const nights  = bs.reduce((s,b)=>s+(b.nights||0),0)
+        const availableNights = days * (houses.length||1)
+        const occupancy = availableNights>0 ? (nights/availableNights)*100 : 0
+        const adr = nights>0 ? revenue/nights : 0
+        months.push({ name:`${MONTHS[mo0]} ${y}`, month:mo0, year:y, revenue, nights, bookings:bs.length, occupancy, adr, availableNights })
+      }
+    }
+    return months
+  }, [active, from, to, houses])
 
   // ── Occupancy per house per month ────────────────────────────────────────
   const occupancyByHouse = useMemo(() => {
-    return Array.from({length:12},(_,mo) => {
-      const days = daysInMonth(year, mo)
-      const row: any = { name:MONTHS[mo], month:mo }
-      houses.forEach(h => {
-        const bookedNights = active
-          .filter(b=>b.house_id===h.id&&!b.is_owner_block)
-          .reduce((s,b)=>s+overlapNights(b.checkin_date?.slice(0,10)||'',b.checkout_date?.slice(0,10)||'',year,mo),0)
-        row[h.name] = days>0 ? Math.round((bookedNights/days)*100) : 0
-        row[`${h.name}_nights`] = bookedNights
-        row[`${h.name}_free`] = days-bookedNights
-      })
-      return row
-    })
-  }, [active, year, houses])
+    const fy = parseInt(from.slice(0,4)), fm = parseInt(from.slice(5,7))
+    const ty = parseInt(to.slice(0,4)),   tm = parseInt(to.slice(5,7))
+    const rows: any[] = []
+    for (let y = fy; y <= ty; y++) {
+      const mStart = y===fy ? fm : 1, mEnd = y===ty ? tm : 12
+      for (let mo = mStart; mo <= mEnd; mo++) {
+        const mo0 = mo - 1
+        const days = daysInMonth(y, mo0)
+        const row: any = { name:`${MONTHS[mo0]} ${y}`, month:mo0, year:y }
+        houses.forEach(h => {
+          const bookedNights = active
+            .filter(b=>b.house_id===h.id&&!b.is_owner_block)
+            .reduce((s,b)=>s+overlapNights(b.checkin_date?.slice(0,10)||'',b.checkout_date?.slice(0,10)||'',y,mo0),0)
+          row[h.name] = days>0 ? Math.round((bookedNights/days)*100) : 0
+          row[`${h.name}_nights`] = bookedNights
+          row[`${h.name}_free`] = days - bookedNights
+        })
+        rows.push(row)
+      }
+    }
+    return rows
+  }, [active, from, to, houses])
 
   // ── By house ──────────────────────────────────────────────────────────────
   const byHouse = useMemo(() => {
@@ -102,7 +129,6 @@ export default function ReportsPage() {
 
   // ── Wochentag-Analyse ────────────────────────────────────────────────────
   const weekdayStats = useMemo(() => {
-    const from = `${year}-01-01`, to = `${year}-12-31`
     // Count total DOW occurrences in year
     const totalDow = [0,0,0,0,0,0,0]
     for (let d = new Date(from); d <= new Date(to); d.setDate(d.getDate()+1)) totalDow[germanDow(d)]++
@@ -158,7 +184,7 @@ export default function ReportsPage() {
       })),
       ltData,
     }
-  }, [active, year])
+  }, [active, from, to])
 
   // ── Sorted bookings ───────────────────────────────────────────────────────
   const sortedBookings = useMemo(() => {
@@ -173,7 +199,8 @@ export default function ReportsPage() {
   const totalRevenue = active.reduce((s,b)=>s+parseFloat(b.total_price||0),0)
   const totalNights  = active.reduce((s,b)=>s+(b.nights||0),0)
   const avgRev = active.length ? totalRevenue/active.length : 0
-  const currentYear = new Date().getFullYear()
+  const currentYear = now.getFullYear()
+  const longStayCount = bookings.filter(b => ['bestaetigt','eingecheckt','ausgecheckt'].includes(b.status) && (b.nights||0) > longStayThreshold).length
 
   const SortTh = ({col,label}:{col:string,label:string}) => (
     <th className="px-4 py-2 text-left text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-800 whitespace-nowrap"
@@ -185,16 +212,50 @@ export default function ReportsPage() {
 
   return (
     <div className="p-6 space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-2xl font-bold text-gray-900">Auswertungen</h1>
-        <div className="flex gap-2 flex-wrap">
-          <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm" value={houseFilter} onChange={e=>setHouseFilter(e.target.value)}>
-            <option value="">Alle Häuser</option>
-            {houses.map((h:any)=><option key={h.id} value={h.id}>{h.name}</option>)}
-          </select>
-          <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm" value={year} onChange={e=>setYear(+e.target.value)}>
-            {[currentYear-2,currentYear-1,currentYear,currentYear+1].map(y=><option key={y} value={y}>{y}</option>)}
-          </select>
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Auswertungen</h1>
+          {excludeLongStay && <p className="text-xs text-amber-600 mt-0.5">⚠️ {longStayCount} Langzeitbuchung(en) &gt; {longStayThreshold} Nächte ausgeblendet</p>}
+        </div>
+        <div className="flex gap-2 flex-wrap items-end">
+          {/* Year quick-pick */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Schnellwahl</label>
+            <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm" value={from.slice(0,4)} onChange={e=>setYear(+e.target.value)}>
+              {[currentYear-2,currentYear-1,currentYear,currentYear+1].map(y=><option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Von</label>
+            <input type="date" className="border border-gray-200 rounded-lg px-3 py-2 text-sm" style={{width:'9rem'}} value={from} onChange={e=>setFrom(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Bis</label>
+            <input type="date" className="border border-gray-200 rounded-lg px-3 py-2 text-sm" style={{width:'9rem'}} value={to} onChange={e=>setTo(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Haus</label>
+            <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm" value={houseFilter} onChange={e=>setHouseFilter(e.target.value)}>
+              <option value="">Alle Häuser</option>
+              {houses.map((h:any)=><option key={h.id} value={h.id}>{h.name}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Langzeitbuchungen Filter */}
+      <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex flex-wrap items-center gap-4">
+        <label className="flex items-center gap-2 text-sm cursor-pointer font-medium text-amber-800">
+          <input type="checkbox" checked={excludeLongStay} onChange={e=>setExcludeLongStay(e.target.checked)} className="rounded" />
+          Langzeitbuchungen ausschließen
+        </label>
+        <div className="flex items-center gap-2 text-sm text-amber-700">
+          <span>ab</span>
+          <input type="number" min={1} max={365} value={longStayThreshold}
+            onChange={e=>setLongStayThreshold(Math.max(1,+e.target.value))}
+            className="w-16 border border-amber-300 rounded-lg px-2 py-1 text-sm text-center bg-white" />
+          <span>Nächten gilt eine Buchung als Langzeitbuchung</span>
+          {longStayCount > 0 && <span className="text-xs bg-amber-200 text-amber-800 px-2 py-0.5 rounded-full">{longStayCount} betroffen</span>}
         </div>
       </div>
 
@@ -271,7 +332,7 @@ export default function ReportsPage() {
                     <tbody>
                       {monthly.map(r=>(
                         <tr key={r.month} className="border-t border-gray-50 hover:bg-gray-50">
-                          <td className="px-4 py-2 font-medium text-gray-900">{r.name} {year}</td>
+                          <td className="px-4 py-2 font-medium text-gray-900">{r.name}</td>
                           <td className="px-4 py-2 text-gray-700">{r.bookings}</td>
                           <td className="px-4 py-2 text-gray-700">{r.nights}</td>
                           <td className="px-4 py-2 text-gray-700">{r.availableNights}</td>
@@ -328,7 +389,7 @@ export default function ReportsPage() {
                     <tbody>
                       {occupancyByHouse.map(r=>(
                         <tr key={r.month} className="border-t border-gray-50 hover:bg-gray-50">
-                          <td className="px-4 py-2 font-medium text-gray-900">{r.name} {year}</td>
+                          <td className="px-4 py-2 font-medium text-gray-900">{r.name}</td>
                           {houses.map(h=>(
                             <>
                               <td key={`${h.id}-occ`} className="px-2 py-2 border-l border-gray-100">
@@ -416,7 +477,7 @@ export default function ReportsPage() {
           {/* Tab 4: Wochentag */}
           {tab===4 && (
             <div className="space-y-5">
-              <p className="text-sm text-gray-500">Alle Kennzahlen basieren auf Buchungen im Jahr <strong>{year}</strong>. Wochentage in deutscher Zählung (Mo–So).</p>
+              <p className="text-sm text-gray-500">Alle Kennzahlen basieren auf Buchungen im Zeitraum <strong>{from} – {to}</strong>. Wochentage in deutscher Zählung (Mo–So).</p>
 
               <div className="grid md:grid-cols-2 gap-5">
                 {/* Hit Rate & Check-in-Verteilung */}
@@ -499,7 +560,7 @@ export default function ReportsPage() {
 
               {/* Detailtabelle */}
               <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-                <div className="px-5 py-4 border-b border-gray-50 font-semibold text-gray-800">Detailtabelle — alle Wochentag-Kennzahlen {year}</div>
+                <div className="px-5 py-4 border-b border-gray-50 font-semibold text-gray-800">Detailtabelle — alle Wochentag-Kennzahlen {from} – {to}</div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50 border-b">

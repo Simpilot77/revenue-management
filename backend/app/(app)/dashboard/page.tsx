@@ -106,6 +106,8 @@ export default function DashboardPage() {
   const [syncing, setSyncing] = useState(false)
   const [syncMsg, setSyncMsg] = useState('')
   const [syncModeModal, setSyncModeModal] = useState(false)
+  const [excludeLongStay, setExcludeLongStay] = useState(false)
+  const [longStayThreshold, setLongStayThreshold] = useState(28)
 
   useEffect(() => {
     Promise.all([
@@ -128,7 +130,10 @@ export default function DashboardPage() {
     })
   }, [bookings, from, to])
 
-  const active = useMemo(() => filtered.filter(b => ['bestaetigt','eingecheckt','ausgecheckt'].includes(b.status)), [filtered])
+  const active = useMemo(() => {
+    const base = filtered.filter(b => ['bestaetigt','eingecheckt','ausgecheckt'].includes(b.status))
+    return excludeLongStay ? base.filter(b => (b.nights||0) <= longStayThreshold) : base
+  }, [filtered, excludeLongStay, longStayThreshold])
   const cancelled = useMemo(() => filtered.filter(b => b.status === 'storniert'), [filtered])
 
   // Core KPIs
@@ -348,6 +353,25 @@ export default function DashboardPage() {
       </div>
 
       {syncMsg && <div className={`text-sm px-4 py-2 rounded-lg ${syncMsg.startsWith('✅')?'bg-green-50 text-green-700':'bg-red-50 text-red-700'}`}>{syncMsg}</div>}
+
+      {/* Langzeitbuchungen Filter */}
+      <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex flex-wrap items-center gap-4">
+        <label className="flex items-center gap-2 text-sm cursor-pointer font-medium text-amber-800">
+          <input type="checkbox" checked={excludeLongStay} onChange={e=>setExcludeLongStay(e.target.checked)} className="rounded" />
+          Langzeitbuchungen ausschließen
+        </label>
+        <div className="flex items-center gap-2 text-sm text-amber-700">
+          <span>ab</span>
+          <input type="number" min={1} max={365} value={longStayThreshold}
+            onChange={e=>setLongStayThreshold(Math.max(1,+e.target.value))}
+            className="w-16 border border-amber-300 rounded-lg px-2 py-1 text-sm text-center bg-white" />
+          <span>Nächten gilt eine Buchung als Langzeitbuchung</span>
+          {excludeLongStay && (() => {
+            const n = active.length > 0 ? filtered.filter(b=>['bestaetigt','eingecheckt','ausgecheckt'].includes(b.status)&&(b.nights||0)>longStayThreshold).length : 0
+            return n > 0 ? <span className="text-xs bg-amber-200 text-amber-800 px-2 py-0.5 rounded-full">{n} ausgeblendet</span> : null
+          })()}
+        </div>
+      </div>
 
       {/* Lodgify Sync Modal */}
       {syncModeModal && (
