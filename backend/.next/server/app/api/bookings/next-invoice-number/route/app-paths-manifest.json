@@ -1,0 +1,3 @@
+{
+  "/api/bookings/next-invoice-number/route": "app/api/bookings/next-invoice-number/route.js"
+}

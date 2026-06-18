@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import InvoiceListSection from '../../components/InvoiceListSection'
 export const dynamic = 'force-dynamic'
 
 const STATUS_OPTIONS = ['angefragt','bestaetigt','eingecheckt','ausgecheckt','storniert','no_show','gesperrt']
@@ -55,19 +56,26 @@ export default function BookingFormPage() {
   const [form, setForm] = useState<any>(EMPTY)
   const [houses, setHouses] = useState<any[]>([])
   const [channels, setChannels] = useState<any[]>([])
+  const [settings, setSettings] = useState<any>(null)
   const [loading, setLoading] = useState(!isNew)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
 
+  const reloadBooking = useCallback(() => {
+    if (!isNew) fetch(`/api/bookings/${id}`).then(r=>r.json()).then(d => setForm((prev: any) => ({ ...prev, ...d })))
+  }, [id, isNew])
+
   useEffect(() => {
     Promise.all([
       fetch('/api/houses').then(r=>r.json()),
       fetch('/api/channels').then(r=>r.json()),
-    ]).then(([h,c]) => {
+      fetch('/api/company-settings').then(r=>r.json()),
+    ]).then(([h,c,s]) => {
       setHouses(h.data??h)
       setChannels(c.data??c)
+      setSettings(s)
     })
     if (!isNew) {
       fetch(`/api/bookings/${id}`).then(r=>r.json()).then(d => {
@@ -278,9 +286,6 @@ export default function BookingFormPage() {
             <Field label="Zahlungseingang">
               <input type="date" className={inp} value={form.payment_date||''} onChange={e=>set('payment_date',e.target.value)} />
             </Field>
-            <Field label="Rechnungsnummer">
-              <input type="text" className={inp} value={form.invoice_number||''} onChange={e=>set('invoice_number',e.target.value)} placeholder="15a-2026-1001" />
-            </Field>
             <Field label="Kaution (€)">
               <input type="number" className={inp} value={form.deposit_amount||''} step="0.01" onChange={e=>set('deposit_amount',e.target.value)} />
             </Field>
@@ -295,6 +300,14 @@ export default function BookingFormPage() {
               </label>
             </div>
           </Section>
+
+          {!isNew && (
+            <InvoiceListSection
+              booking={{ ...form, id, house_name: houses.find((h:any)=>h.id===form.house_id)?.name }}
+              settings={settings}
+              onUpdate={reloadBooking}
+            />
+          )}
 
           {(form.status === 'storniert' || form.status === 'no_show') && (
             <Section title="❌ Stornierung">

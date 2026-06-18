@@ -93,6 +93,12 @@
       "namedRegex": "^/api/bookings(?:/)?$"
     },
     {
+      "page": "/api/bookings/next-invoice-number",
+      "regex": "^/api/bookings/next\\-invoice\\-number(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/bookings/next\\-invoice\\-number(?:/)?$"
+    },
+    {
       "page": "/api/calendar-extra-tasks",
       "regex": "^/api/calendar\\-extra\\-tasks(?:/)?$",
       "routeKeys": {},

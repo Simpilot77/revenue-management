@@ -45,9 +45,27 @@
       ".next/static/chunks/1-8s9_t85wwr4.js",
       ".next/static/chunks/2h6nhcjj8bs6s.js",
       ".next/static/chunks/0ksf6db6-h6w1.js",
-      ".next/static/chunks/0ib2jhqotafmn.js",
+      ".next/static/chunks/1u4y2v0v8bp2e.js",
       ".next/static/chunks/0ycj0a6sa967t.js",
       ".next/static/chunks/0leb27suxr-bc.js",
+      ".next/static/chunks/09ozbzi9hwcvp.js",
+      ".next/static/chunks/07-hzktxqjvzd.js",
+      ".next/static/chunks/3n6ct_7o4ck-s.js",
+      ".next/static/chunks/1v6r9q3ck_bj4.js",
+      ".next/static/chunks/turbopack-3li6uz4uafdyy.js"
+    ]
+  },
+  {
+    "route": "/bookings/[id]",
+    "firstLoadUncompressedJsBytes": 1272130,
+    "firstLoadChunkPaths": [
+      ".next/static/chunks/05-c3ty_6dwfk.js",
+      ".next/static/chunks/1-8s9_t85wwr4.js",
+      ".next/static/chunks/2h6nhcjj8bs6s.js",
+      ".next/static/chunks/0ksf6db6-h6w1.js",
+      ".next/static/chunks/3a5estbkpn2lh.js",
+      ".next/static/chunks/0ycj0a6sa967t.js",
+      ".next/static/chunks/1gjw17ykyvc8o.js",
       ".next/static/chunks/09ozbzi9hwcvp.js",
       ".next/static/chunks/07-hzktxqjvzd.js",
       ".next/static/chunks/3n6ct_7o4ck-s.js",
@@ -98,22 +116,6 @@
       ".next/static/chunks/2h6nhcjj8bs6s.js",
       ".next/static/chunks/0ksf6db6-h6w1.js",
       ".next/static/chunks/2wsqykog486xa.js",
-      ".next/static/chunks/09ozbzi9hwcvp.js",
-      ".next/static/chunks/07-hzktxqjvzd.js",
-      ".next/static/chunks/3n6ct_7o4ck-s.js",
-      ".next/static/chunks/1v6r9q3ck_bj4.js",
-      ".next/static/chunks/turbopack-3li6uz4uafdyy.js"
-    ]
-  },
-  {
-    "route": "/bookings/[id]",
-    "firstLoadUncompressedJsBytes": 779435,
-    "firstLoadChunkPaths": [
-      ".next/static/chunks/05-c3ty_6dwfk.js",
-      ".next/static/chunks/1-8s9_t85wwr4.js",
-      ".next/static/chunks/2h6nhcjj8bs6s.js",
-      ".next/static/chunks/0ksf6db6-h6w1.js",
-      ".next/static/chunks/168xkkeb2hclh.js",
       ".next/static/chunks/09ozbzi9hwcvp.js",
       ".next/static/chunks/07-hzktxqjvzd.js",
       ".next/static/chunks/3n6ct_7o4ck-s.js",

@@ -16,6 +16,7 @@
   "/api/booking-tasks/[id]/route": "app/api/booking-tasks/[id]/route.js",
   "/api/booking-tasks/route": "app/api/booking-tasks/route.js",
   "/api/bookings/[id]/route": "app/api/bookings/[id]/route.js",
+  "/api/bookings/next-invoice-number/route": "app/api/bookings/next-invoice-number/route.js",
   "/api/bookings/route": "app/api/bookings/route.js",
   "/api/calendar-extra-tasks/route": "app/api/calendar-extra-tasks/route.js",
   "/api/channels/route": "app/api/channels/route.js",

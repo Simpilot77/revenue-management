@@ -16,6 +16,7 @@
   "/api/booking-tasks/[id]/route": "/api/booking-tasks/[id]",
   "/api/booking-tasks/route": "/api/booking-tasks",
   "/api/bookings/[id]/route": "/api/bookings/[id]",
+  "/api/bookings/next-invoice-number/route": "/api/bookings/next-invoice-number",
   "/api/bookings/route": "/api/bookings",
   "/api/calendar-extra-tasks/route": "/api/calendar-extra-tasks",
   "/api/channels/route": "/api/channels",
