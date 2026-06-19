@@ -39,7 +39,7 @@
   },
   {
     "route": "/tasks",
-    "firstLoadUncompressedJsBytes": 1290951,
+    "firstLoadUncompressedJsBytes": 1291373,
     "firstLoadChunkPaths": [
       ".next/static/chunks/05-c3ty_6dwfk.js",
       ".next/static/chunks/1-8s9_t85wwr4.js",
@@ -47,7 +47,7 @@
       ".next/static/chunks/0ksf6db6-h6w1.js",
       ".next/static/chunks/1u4y2v0v8bp2e.js",
       ".next/static/chunks/0ycj0a6sa967t.js",
-      ".next/static/chunks/0leb27suxr-bc.js",
+      ".next/static/chunks/09lngkmn49cew.js",
       ".next/static/chunks/09ozbzi9hwcvp.js",
       ".next/static/chunks/07-hzktxqjvzd.js",
       ".next/static/chunks/3n6ct_7o4ck-s.js",

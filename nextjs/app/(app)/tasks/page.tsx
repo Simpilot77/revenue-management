@@ -62,8 +62,12 @@ function getTaskDueAuto(key: string, booking: any): string | null {
   }
 }
 
-function allTasksDone(taskState: any) {
-  return TASK_DEFS.every(t => taskState?.[t.key])
+function effectiveDefs(booking: any) {
+  return TASK_DEFS.filter(t => t.key !== 'kaution_rueck' || !!booking?.deposit_taken)
+}
+
+function allTasksDone(taskState: any, booking?: any) {
+  return (booking ? effectiveDefs(booking) : TASK_DEFS).every(t => taskState?.[t.key])
 }
 
 function dueStatus(dueDate: string | null, isDone: boolean) {
@@ -353,7 +357,14 @@ function TaskRow({ task, booking, tasks, today, invoiceNum, setInvoiceNum, onTog
           className="w-4 h-4 accent-emerald-600 cursor-pointer shrink-0 mt-0.5" />
         <span className="text-base shrink-0 mt-0.5">{task.icon}</span>
         <div className="flex-1 min-w-0">
-          <span className={`text-sm block ${isDone ? 'line-through text-gray-400' : 'text-gray-700'}`}>{task.label}</span>
+          <span className={`text-sm block ${isDone ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+            {task.label}
+            {task.key === 'kaution_rueck' && booking.deposit_amount && (
+              <span className="ml-1.5 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5">
+                {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(parseFloat(booking.deposit_amount))}
+              </span>
+            )}
+          </span>
           {task.key === 'invoice_done' && (
             <div className="space-y-1.5 mt-1" onClick={e => e.stopPropagation()}>
               <div className="flex items-center gap-1">
@@ -414,14 +425,15 @@ function BookingTaskCard({ booking, tasks, onToggle, onUpdate, highlight, settin
   }, [highlight])
 
   const t = tasks || {}
-  const done = allTasksDone(t)
-  const doneCount = TASK_DEFS.filter(d => t[d.key]).length
-  const pct = Math.round((doneCount / TASK_DEFS.length) * 100)
+  const defs = effectiveDefs(booking)
+  const done = allTasksDone(t, booking)
+  const doneCount = defs.filter(d => t[d.key]).length
+  const pct = Math.round((doneCount / defs.length) * 100)
   const today = new Date().toISOString().slice(0, 10)
   const isActive = booking.checkin_date?.slice(0, 10) <= today && booking.checkout_date?.slice(0, 10) >= today
   const isFuture = booking.checkin_date?.slice(0, 10) > today
 
-  const overdueCount = TASK_DEFS.filter(td => {
+  const overdueCount = defs.filter(td => {
     if (t[td.key]) return false
     const due = getTaskDueAuto(td.key, booking)
     return due && due < today
@@ -450,7 +462,7 @@ function BookingTaskCard({ booking, tasks, onToggle, onUpdate, highlight, settin
               strokeLinecap="round" />
           </svg>
           <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-gray-600">
-            {doneCount}/{TASK_DEFS.length}
+            {doneCount}/{defs.length}
           </span>
         </div>
 
@@ -491,7 +503,7 @@ function BookingTaskCard({ booking, tasks, onToggle, onUpdate, highlight, settin
       {expanded && (
         <div className="mt-4 pt-4 border-t border-gray-100 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {TASK_DEFS.map(task => (
+            {defs.map(task => (
               <TaskRow
                 key={task.key}
                 task={task}
@@ -573,7 +585,7 @@ function ZuErledigenpanel({ bookings, tasksMap, onToggle }: any) {
     const isFuture = booking.checkin_date?.slice(0, 10) > today
     const context = isActive ? 'Aktuell' : isFuture ? 'Bevorstehend' : 'Abgereist'
 
-    TASK_DEFS.forEach(td => {
+    effectiveDefs(booking).forEach(td => {
       if (tasks[td.key]) return
       const due = getTaskDueAuto(td.key, booking)
       pendingItems.push({
@@ -751,13 +763,13 @@ function TasksInner() {
     { key: 'recent',    label: 'Abgereist',       fn: (b: any) => b.checkout_date?.slice(0,10) < today },
     { key: 'overdue',   label: 'Überfällig',      fn: (b: any) => {
       const t = tasksMap[b.id] || {}
-      return TASK_DEFS.some(td => {
+      return effectiveDefs(b).some(td => {
         if (t[td.key]) return false
         const due = getTaskDueAuto(td.key, b)
         return due && due < today
       })
     }},
-    { key: 'incomplete', label: 'Offen',          fn: (b: any) => !allTasksDone(tasksMap[b.id] || {}) },
+    { key: 'incomplete', label: 'Offen',          fn: (b: any) => !allTasksDone(tasksMap[b.id] || {}, b) },
     { key: 'all',        label: 'Alle',           fn: () => true },
   ]
 
@@ -772,18 +784,18 @@ function TasksInner() {
       return (a.checkin_date || '').localeCompare(b.checkin_date || '')
     })
 
-  const totalTasks  = bookings.length * TASK_DEFS.length
-  const doneTasks   = bookings.reduce((s: number, b: any) => s + TASK_DEFS.filter(td => (tasksMap[b.id] || {})[td.key]).length, 0)
-  const completedBookings = bookings.filter((b: any) => allTasksDone(tasksMap[b.id] || {})).length
+  const totalTasks  = bookings.reduce((s: number, b: any) => s + effectiveDefs(b).length, 0)
+  const doneTasks   = bookings.reduce((s: number, b: any) => s + effectiveDefs(b).filter(td => (tasksMap[b.id] || {})[td.key]).length, 0)
+  const completedBookings = bookings.filter((b: any) => allTasksDone(tasksMap[b.id] || {}, b)).length
   const overdueTotal = bookings.reduce((s: number, b: any) => {
     const t = tasksMap[b.id] || {}
-    return s + TASK_DEFS.filter(td => {
+    return s + effectiveDefs(b).filter(td => {
       if (t[td.key]) return false
       const due = getTaskDueAuto(td.key, b)
       return due && due < today
     }).length
   }, 0)
-  const pendingTotal = bookings.reduce((s: number, b: any) => s + TASK_DEFS.filter(td => !(tasksMap[b.id] || {})[td.key]).length, 0)
+  const pendingTotal = bookings.reduce((s: number, b: any) => s + effectiveDefs(b).filter(td => !(tasksMap[b.id] || {})[td.key]).length, 0)
 
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">Laden…</div>
 
