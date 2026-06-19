@@ -41,7 +41,7 @@ function Toggle({ value, onChange, options }: any) {
   )
 }
 
-function KpiCard({ label, value, sub, color='blue', icon, tooltip, onClick }: any) {
+function KpiCard({ label, value, sub, color='blue', tooltip, onClick }: any) {
   const accents: any = {
     blue: 'border-l-blue-500',
     green: 'border-l-green-500',
@@ -52,11 +52,21 @@ function KpiCard({ label, value, sub, color='blue', icon, tooltip, onClick }: an
   }
   return (
     <div
-      className={`bg-white rounded-lg border border-gray-100 border-l-[3px] ${accents[color]} px-3.5 py-3 shadow-sm ${onClick ? 'cursor-pointer hover:shadow-md hover:border-l-[3px] transition-shadow' : ''}`}
+      className={`relative bg-white rounded-lg border border-gray-100 border-l-[3px] ${accents[color]} px-3.5 py-3 shadow-sm ${onClick ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
       onClick={onClick}
-      title={tooltip}
     >
-      <div className="text-[11px] text-gray-400 font-medium uppercase tracking-wide truncate mb-1">{label}</div>
+      <div className="flex items-start justify-between gap-1 mb-1">
+        <div className="text-[11px] text-gray-400 font-medium uppercase tracking-wide leading-tight">{label}</div>
+        {tooltip && (
+          <div className="group relative shrink-0">
+            <span className="text-[11px] text-gray-300 hover:text-gray-500 cursor-help select-none leading-none">ⓘ</span>
+            <div className="pointer-events-none absolute right-0 top-5 z-50 w-56 rounded-lg bg-gray-900 text-white text-xs px-3 py-2.5 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-150 leading-relaxed">
+              {tooltip}
+              <div className="absolute -top-1.5 right-1 w-3 h-3 bg-gray-900 rotate-45" />
+            </div>
+          </div>
+        )}
+      </div>
       <div className="text-lg font-bold text-gray-900 leading-tight truncate">{value}</div>
       {sub && <div className="text-[11px] text-gray-400 mt-0.5 truncate">{sub}{onClick && <span className="ml-1 text-blue-400">→</span>}</div>}
     </div>
@@ -473,30 +483,40 @@ export default function DashboardPage() {
         <>
           {/* KPIs — all in one compact grid */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
-            <KpiCard label="Auslastung" value={fmtPct(kpis.occupancyRate)} sub={`${kpis.totalNights} Nächte belegt`} color="blue" tooltip="Belegte Nächte / verfügbare Nächte im Zeitraum" />
-            <KpiCard label="Umsatz" value={fmtEur(kpis.totalRevenue)} sub={`${kpis.confirmedBookings} Buchungen`} color="green" />
-            <KpiCard label="ADR" value={fmtEur(kpis.adr)} sub="Ø Tagespreis" color="purple" tooltip="Average Daily Rate: Umsatz / tatsächlich belegte Nächte" />
-            <KpiCard label="RevPAR" value={fmtEur(kpis.revpar)} sub="Umsatz / verf. Nächte" color="orange" tooltip="Revenue per Available Room: Umsatz / alle verfügbaren Nächte" />
-            <KpiCard label="Net ADR" value={fmtEur(kpis.netAdr)} sub="Bereinigter ADR" color="teal" tooltip="Belegungsbereinigter ADR = RevPAR. Der tatsächliche Erlös pro verfügbarem Tag inkl. Leerstände." />
-            <KpiCard label="Trailing Occ." value={fmtPct(trailingOccupancy)} sub="Letzte 365 Tage" color="blue" tooltip="Tatsächlich gebuchte Nächte der letzten 365 Tage im Verhältnis zu allen verfügbaren Nächten." />
-            <KpiCard label="Ø Aufenthalt" value={`${kpis.avgLos} Nächte`} sub="Length of Stay" color="blue" tooltip="Durchschnittliche Aufenthaltsdauer über alle Buchungen" />
-            <KpiCard label="Ø Vorlaufzeit" value={`${kpis.avgLeadTime} Tage`} sub="Lead Time" color="purple" tooltip="Tage zwischen Buchungsdatum und Anreisedatum" />
+            <KpiCard label="Auslastung" value={fmtPct(kpis.occupancyRate)} sub={`${kpis.totalNights} Nächte belegt`} color="blue"
+              tooltip="Wie viele Nächte war dein Haus im gewählten Zeitraum tatsächlich vermietet? 100 % = immer ausgebucht, 0 % = immer leer. Ein Wert um 70–80 % gilt als sehr gut." />
+            <KpiCard label="Umsatz" value={fmtEur(kpis.totalRevenue)} sub={`${kpis.confirmedBookings} Buchungen`} color="green"
+              tooltip="Der Gesamtbetrag aller bestätigten Buchungen im gewählten Zeitraum – einfach alle Buchungspreise zusammengezählt." />
+            <KpiCard label="ADR" value={fmtEur(kpis.adr)} sub="Ø Tagespreis" color="purple"
+              tooltip="Average Daily Rate – was du im Schnitt pro vermieteter Nacht verdient hast. Je höher, desto besser dein durchschnittlicher Übernachtungspreis." />
+            <KpiCard label="RevPAR" value={fmtEur(kpis.revpar)} sub="Umsatz / verf. Nächte" color="orange"
+              tooltip="Revenue per Available Room – was du pro verfügbarer Nacht verdient hast, also auch die leeren Nächte mitgerechnet. Kombiniert Preis und Auslastung in einer Zahl." />
+            <KpiCard label="Net ADR" value={fmtEur(kpis.netAdr)} sub="Bereinigter ADR" color="teal"
+              tooltip="Entspricht dem RevPAR. Zeigt, was du pro Nacht wirklich verdient hast – unter Einbeziehung aller Leerstände. Ehrlicher als der normale ADR." />
+            <KpiCard label="Trailing Occ." value={fmtPct(trailingOccupancy)} sub="Letzte 365 Tage" color="blue"
+              tooltip="Deine Auslastung der vergangenen 365 Tage – unabhängig vom oben gewählten Zeitraum. Gut als fester Vergleichswert für die langfristige Entwicklung." />
+            <KpiCard label="Ø Aufenthalt" value={`${kpis.avgLos} Nächte`} sub="Length of Stay" color="blue"
+              tooltip="Wie viele Nächte bleiben deine Gäste im Schnitt? Längere Aufenthalte bedeuten weniger Reinigungen, weniger Aufwand und mehr Planungssicherheit." />
+            <KpiCard label="Ø Vorlaufzeit" value={`${kpis.avgLeadTime} Tage`} sub="Lead Time" color="purple"
+              tooltip="Wie viele Tage im Voraus buchen deine Gäste typischerweise? Kurze Vorlaufzeit = viele Last-Minute-Bucher. Lange Vorlaufzeit = Gäste planen früh." />
             <KpiCard label="Stornoquote" value={fmtPct(kpis.cancellationRate)} sub={`${kpis.cancellations} Stornos`} color="red"
+              tooltip="Wie viele Buchungen wurden storniert? Eine hohe Quote kann auf zu strenge Stornobedingungen oder viele unsichere Buchungen hindeuten."
               onClick={()=>setListModal({title:'Stornierte Buchungen',bookings:kpis.cancelledList})} />
             <KpiCard label="Stammgäste" value={kpis.returningGuests} sub="Wiederholungen" color="green"
+              tooltip="Gäste, die bereits mehr als einmal gebucht haben. Stammgäste sind besonders wertvoll – sie kommen wieder, schreiben gute Bewertungen und empfehlen weiter."
               onClick={()=>setListModal({title:'Stammgäste',bookings:kpis.returningList})} />
             <KpiCard
               label="Bester Check-in-Tag"
               value={weekdayStats.byDow.length ? weekdayStats.byDow.reduce((a,b)=>b.checkinPct>a.checkinPct?b:a).name : '–'}
               sub={weekdayStats.byDow.length ? `${weekdayStats.byDow.reduce((a,b)=>b.checkinPct>a.checkinPct?b:a).checkinPct}% Anreisen` : ''}
               color="green"
-              tooltip="Wochentag mit den häufigsten Check-ins." />
+              tooltip="An welchem Wochentag reisen die meisten Gäste an? Das hilft dir, Reinigungen und Übergaben gezielt an diesem Tag einzuplanen." />
             <KpiCard
               label="Schwächster Tag"
               value={weekdayStats.byDow.filter(d=>d.totalNights>0).length ? weekdayStats.byDow.filter(d=>d.totalNights>0).reduce((a,b)=>b.hitRate<a.hitRate?b:a).name : '–'}
               sub={weekdayStats.byDow.filter(d=>d.totalNights>0).length ? `${weekdayStats.byDow.filter(d=>d.totalNights>0).reduce((a,b)=>b.hitRate<a.hitRate?b:a).hitRate}% Hit Rate` : ''}
               color="orange"
-              tooltip="Wochentag mit der niedrigsten Hit Rate — hier besteht der größte Handlungsbedarf bei der Preisgestaltung." />
+              tooltip="An welchem Wochentag ist dein Haus am häufigsten leer? Genau hier könntest du mit Sonderangeboten oder günstigeren Preisen mehr Buchungen holen." />
           </div>
 
           {/* Charts: Revenue & Occupancy */}
