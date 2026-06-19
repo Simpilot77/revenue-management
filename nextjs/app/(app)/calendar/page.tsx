@@ -456,7 +456,7 @@ export default function CalendarPage() {
           </div>
 
           {/* Mini overview */}
-          <MiniOverview houses={houses} bookings={bookings} cleaningMarkers={markers} onNavigate={(id) => router.push(`/bookings/${id}/edit`)} />
+          <MiniOverview houses={houses} bookings={bookings} cleaningMarkers={markers} onNavigate={(id) => router.push(`/bookings/${id}`)} />
         </div>
       )}
 
@@ -502,7 +502,7 @@ export default function CalendarPage() {
               ) : <div className="text-gray-500 mb-3">Alle Aufgaben erledigt.</div>}
               <div className="flex gap-3">
                 <button className="text-blue-600 hover:text-blue-800 text-xs font-medium" onClick={() => { router.push(`/tasks?booking=${readinessPopup.booking.id}`); setReadinessPopup(null) }}>📋 Zu den Aufgaben</button>
-                <button className="text-blue-600 hover:text-blue-800 text-xs font-medium" onClick={() => { router.push(`/bookings/${readinessPopup.booking.id}/edit`); setReadinessPopup(null) }}>📝 Zur Buchung →</button>
+                <button className="text-blue-600 hover:text-blue-800 text-xs font-medium" onClick={() => { router.push(`/bookings/${readinessPopup.booking.id}`); setReadinessPopup(null) }}>📝 Zur Buchung →</button>
               </div>
             </div>
           </div>
@@ -518,7 +518,7 @@ export default function CalendarPage() {
               <p className="text-xs font-semibold text-gray-700 truncate">{bookingActionPopup.booking.guest_name}</p>
               <p className="text-xs text-gray-400">{bookingActionPopup.booking.house_name}</p>
             </div>
-            <button className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-2" onClick={() => { router.push(`/bookings/${bookingActionPopup.booking.id}/edit`); setBookingActionPopup(null) }}>✏️ Buchung bearbeiten</button>
+            <button className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-2" onClick={() => { router.push(`/bookings/${bookingActionPopup.booking.id}`); setBookingActionPopup(null) }}>✏️ Buchung bearbeiten</button>
             <button className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2" onClick={() => { setDeleteConfirm(bookingActionPopup.booking); setBookingActionPopup(null) }}>🗑️ Buchung löschen</button>
           </div>
         </div>

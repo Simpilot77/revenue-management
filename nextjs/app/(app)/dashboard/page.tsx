@@ -42,15 +42,23 @@ function Toggle({ value, onChange, options }: any) {
 }
 
 function KpiCard({ label, value, sub, color='blue', icon, tooltip, onClick }: any) {
-  const colors: any = { blue:'text-blue-700 bg-blue-50', green:'text-green-700 bg-green-50', purple:'text-purple-700 bg-purple-50', orange:'text-orange-700 bg-orange-50', red:'text-red-700 bg-red-50', teal:'text-teal-700 bg-teal-50' }
+  const accents: any = {
+    blue: 'border-l-blue-500',
+    green: 'border-l-green-500',
+    purple: 'border-l-purple-500',
+    orange: 'border-l-amber-500',
+    red: 'border-l-red-500',
+    teal: 'border-l-teal-500',
+  }
   return (
-    <div className={`kpi-card ${onClick ? 'cursor-pointer hover:ring-2 hover:ring-blue-300 transition-shadow' : ''}`} onClick={onClick} title={tooltip}>
-      <div className="flex items-start justify-between">
-        <span className="text-sm text-gray-500">{label}</span>
-        <span className={`text-lg p-1.5 rounded-lg ${colors[color]}`}>{icon}</span>
-      </div>
-      <div className="text-2xl font-bold text-gray-900 mt-1">{value}</div>
-      {sub && <div className="text-xs text-gray-400">{sub}{onClick && <span className="ml-1 text-blue-400">→ Details</span>}</div>}
+    <div
+      className={`bg-white rounded-lg border border-gray-100 border-l-[3px] ${accents[color]} px-3.5 py-3 shadow-sm ${onClick ? 'cursor-pointer hover:shadow-md hover:border-l-[3px] transition-shadow' : ''}`}
+      onClick={onClick}
+      title={tooltip}
+    >
+      <div className="text-[11px] text-gray-400 font-medium uppercase tracking-wide truncate mb-1">{label}</div>
+      <div className="text-lg font-bold text-gray-900 leading-tight truncate">{value}</div>
+      {sub && <div className="text-[11px] text-gray-400 mt-0.5 truncate">{sub}{onClick && <span className="ml-1 text-blue-400">→</span>}</div>}
     </div>
   )
 }
@@ -393,25 +401,28 @@ export default function DashboardPage() {
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">Daten werden geladen…</div>
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-5 space-y-5">
       {listModal && <BookingListModal title={listModal.title} bookings={listModal.bookings} onClose={()=>setListModal(null)} />}
 
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-500 text-sm">Übersicht Revenue Management</p>
+          <h1 className="text-xl font-bold text-gray-900 tracking-tight">Dashboard</h1>
+          <p className="text-gray-400 text-xs">Revenue Management · {from.slice(0,4) === to.slice(0,4) ? from.slice(0,4) : `${from.slice(0,4)}–${to.slice(0,4)}`}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <label className="text-xs text-gray-500">Von</label>
-          <input type="date" className="form-input" style={{width:'9rem'}} value={from} onChange={e=>setFrom(e.target.value)} />
-          <label className="text-xs text-gray-500">Bis</label>
-          <input type="date" className="form-input" style={{width:'9rem'}} value={to} onChange={e=>setTo(e.target.value)} />
-          <button onClick={()=>setSyncModeModal(true)} disabled={syncing} className="btn-secondary flex items-center gap-1.5 no-print">
-            {syncing?'⏳':'🔄'} Lodgify Import
+          <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
+            <label className="text-xs text-gray-400">Von</label>
+            <input type="date" className="bg-transparent text-xs text-gray-700 outline-none" style={{width:'8rem'}} value={from} onChange={e=>setFrom(e.target.value)} />
+            <span className="text-gray-300">–</span>
+            <label className="text-xs text-gray-400">Bis</label>
+            <input type="date" className="bg-transparent text-xs text-gray-700 outline-none" style={{width:'8rem'}} value={to} onChange={e=>setTo(e.target.value)} />
+          </div>
+          <button onClick={()=>setSyncModeModal(true)} disabled={syncing} className="btn-secondary text-xs flex items-center gap-1.5 no-print">
+            {syncing?'⏳':'🔄'} Lodgify
           </button>
-          <button onClick={handlePrint} className="btn-secondary flex items-center gap-1.5 no-print">🖨️ PDF / Drucken</button>
-          <a href="/bookings/new" className="btn-primary no-print">+ Neue Buchung</a>
+          <button onClick={handlePrint} className="btn-secondary text-xs flex items-center gap-1.5 no-print">🖨️ PDF</button>
+          <a href="/bookings/new" className="btn-primary text-xs no-print">+ Buchung</a>
         </div>
       </div>
 
@@ -460,49 +471,31 @@ export default function DashboardPage() {
 
       {kpis ? (
         <>
-          {/* KPIs Row 1: Core */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <KpiCard label="Auslastung" value={fmtPct(kpis.occupancyRate)} sub={`${kpis.totalNights} Nächte belegt`} color="blue" icon="🏠" tooltip="Belegte Nächte / verfügbare Nächte im Zeitraum" />
-            <KpiCard label="Umsatz" value={fmtEur(kpis.totalRevenue)} sub={`${kpis.confirmedBookings} Buchungen`} color="green" icon="💶" />
-            <KpiCard label="ADR" value={fmtEur(kpis.adr)} sub="Ø Tagespreis (belegte Nächte)" color="purple" icon="📊" tooltip="Average Daily Rate: Umsatz / tatsächlich belegte Nächte" />
-            <KpiCard label="RevPAR" value={fmtEur(kpis.revpar)} sub="Umsatz / alle verf. Nächte" color="orange" icon="📈" tooltip="Revenue per Available Room: Umsatz / alle verfügbaren Nächte" />
-          </div>
-
-          {/* KPIs Row 2: Lead & LOS */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <KpiCard label="Ø Aufenthalt" value={`${kpis.avgLos} Nächte`} sub="Length of Stay" color="blue" icon="🌙" tooltip="Durchschnittliche Aufenthaltsdauer über alle Buchungen" />
-            <KpiCard label="Ø Vorlaufzeit" value={`${kpis.avgLeadTime} Tage`} sub="Lead Time: Buchung → Check-in" color="purple" icon="⏱️" tooltip="Tage zwischen Buchungsdatum und Anreisedatum" />
-            <KpiCard label="Stornoquote" value={fmtPct(kpis.cancellationRate)} sub={`${kpis.cancellations} Stornos`} color="red" icon="❌"
+          {/* KPIs — all in one compact grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+            <KpiCard label="Auslastung" value={fmtPct(kpis.occupancyRate)} sub={`${kpis.totalNights} Nächte belegt`} color="blue" tooltip="Belegte Nächte / verfügbare Nächte im Zeitraum" />
+            <KpiCard label="Umsatz" value={fmtEur(kpis.totalRevenue)} sub={`${kpis.confirmedBookings} Buchungen`} color="green" />
+            <KpiCard label="ADR" value={fmtEur(kpis.adr)} sub="Ø Tagespreis" color="purple" tooltip="Average Daily Rate: Umsatz / tatsächlich belegte Nächte" />
+            <KpiCard label="RevPAR" value={fmtEur(kpis.revpar)} sub="Umsatz / verf. Nächte" color="orange" tooltip="Revenue per Available Room: Umsatz / alle verfügbaren Nächte" />
+            <KpiCard label="Net ADR" value={fmtEur(kpis.netAdr)} sub="Bereinigter ADR" color="teal" tooltip="Belegungsbereinigter ADR = RevPAR. Der tatsächliche Erlös pro verfügbarem Tag inkl. Leerstände." />
+            <KpiCard label="Trailing Occ." value={fmtPct(trailingOccupancy)} sub="Letzte 365 Tage" color="blue" tooltip="Tatsächlich gebuchte Nächte der letzten 365 Tage im Verhältnis zu allen verfügbaren Nächten." />
+            <KpiCard label="Ø Aufenthalt" value={`${kpis.avgLos} Nächte`} sub="Length of Stay" color="blue" tooltip="Durchschnittliche Aufenthaltsdauer über alle Buchungen" />
+            <KpiCard label="Ø Vorlaufzeit" value={`${kpis.avgLeadTime} Tage`} sub="Lead Time" color="purple" tooltip="Tage zwischen Buchungsdatum und Anreisedatum" />
+            <KpiCard label="Stornoquote" value={fmtPct(kpis.cancellationRate)} sub={`${kpis.cancellations} Stornos`} color="red"
               onClick={()=>setListModal({title:'Stornierte Buchungen',bookings:kpis.cancelledList})} />
-            <KpiCard label="Stammgäste" value={kpis.returningGuests} sub="Wiederholungsbuchungen" color="green" icon="⭐"
+            <KpiCard label="Stammgäste" value={kpis.returningGuests} sub="Wiederholungen" color="green"
               onClick={()=>setListModal({title:'Stammgäste',bookings:kpis.returningList})} />
-          </div>
-
-          {/* KPIs Row 3: Advanced */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <KpiCard
-              label="Net ADR (bel.-bereinigt)"
-              value={fmtEur(kpis.netAdr)}
-              sub="Umsatz / alle verf. Nächte"
-              color="teal" icon="🎯"
-              tooltip="Belegungsbereinigter ADR = RevPAR. Der tatsächliche Erlös pro verfügbarem Tag inkl. Leerstände." />
-            <KpiCard
-              label="Trailing Occ. (letzte 365d)"
-              value={fmtPct(trailingOccupancy)}
-              sub="Historische Belegungsrate"
-              color="blue" icon="📅"
-              tooltip="Tatsächlich gebuchte Nächte der letzten 365 Tage im Verhältnis zu allen verfügbaren Nächten." />
             <KpiCard
               label="Bester Check-in-Tag"
               value={weekdayStats.byDow.length ? weekdayStats.byDow.reduce((a,b)=>b.checkinPct>a.checkinPct?b:a).name : '–'}
-              sub={weekdayStats.byDow.length ? `${weekdayStats.byDow.reduce((a,b)=>b.checkinPct>a.checkinPct?b:a).checkinPct}% aller Anreisen` : ''}
-              color="green" icon="📌"
-              tooltip="Wochentag mit den häufigsten Check-ins. Das ist dein stärkster Ankertag für den Buchungsfluss." />
+              sub={weekdayStats.byDow.length ? `${weekdayStats.byDow.reduce((a,b)=>b.checkinPct>a.checkinPct?b:a).checkinPct}% Anreisen` : ''}
+              color="green"
+              tooltip="Wochentag mit den häufigsten Check-ins." />
             <KpiCard
-              label="Schwächster Wochentag"
+              label="Schwächster Tag"
               value={weekdayStats.byDow.filter(d=>d.totalNights>0).length ? weekdayStats.byDow.filter(d=>d.totalNights>0).reduce((a,b)=>b.hitRate<a.hitRate?b:a).name : '–'}
               sub={weekdayStats.byDow.filter(d=>d.totalNights>0).length ? `${weekdayStats.byDow.filter(d=>d.totalNights>0).reduce((a,b)=>b.hitRate<a.hitRate?b:a).hitRate}% Hit Rate` : ''}
-              color="orange" icon="⚠️"
+              color="orange"
               tooltip="Wochentag mit der niedrigsten Hit Rate — hier besteht der größte Handlungsbedarf bei der Preisgestaltung." />
           </div>
 
