@@ -1,5 +1,5 @@
 {
-  "synced_at": "2026-06-21T13:57:06.159784Z",
+  "synced_at": "2026-06-21T19:22:37.694385Z",
   "bookings": [
     {
       "id": 18588939,
@@ -2188,8 +2188,8 @@
       "external_reference": "20508780",
       "booking_date": "2026-05-15",
       "checkin_date": "2026-05-15",
-      "checkout_date": "2026-06-22",
-      "nights": 38,
+      "checkout_date": "2026-06-26",
+      "nights": 42,
       "guest_name": {
         "first_name": "Ion",
         "last_name": "Neacsu",
@@ -2203,10 +2203,10 @@
       "guest_count": 5,
       "adults": 5,
       "children": 0,
-      "daily_rate": 194.37,
+      "daily_rate": 192.52,
       "cleaning_fee": 0,
       "discount_percent": 0,
-      "total_price": 7386.0,
+      "total_price": 8086.0,
       "currency": {
         "id": 92,
         "code": "EUR",
