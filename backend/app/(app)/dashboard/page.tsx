@@ -125,6 +125,10 @@ export default function DashboardPage() {
   const [syncing, setSyncing] = useState(false)
   const [syncMsg, setSyncMsg] = useState('')
   const [syncModeModal, setSyncModeModal] = useState(false)
+  const [fullSyncOptions, setFullSyncOptions] = useState(false)
+  const [fullSyncOverwrite, setFullSyncOverwrite] = useState({
+    gastdaten: true, preise: true, status: true, zahlung: true, notizen: true,
+  })
   const [excludeLongStay, setExcludeLongStay] = useState(false)
   const [longStayThreshold, setLongStayThreshold] = useState(28)
   const [companyName, setCompanyName] = useState('Workation Wolfsburg')
@@ -352,9 +356,12 @@ export default function DashboardPage() {
     return monthly.map(m => ({ ...m, cashflow:+(map[m.month]?.cashflow||0).toFixed(0), payments:map[m.month]?.payments||0 }))
   }, [active, monthly])
 
-  const handleLodgifySync = async (mode: 'new_only'|'full_sync') => {
-    setSyncModeModal(false); setSyncing(true); setSyncMsg('')
-    const res = await fetch('/api/lodgify-sync', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({mode}) })
+  const handleLodgifySync = async (mode: 'new_only'|'full_sync', overwrite?: typeof fullSyncOverwrite) => {
+    setSyncModeModal(false); setFullSyncOptions(false); setSyncing(true); setSyncMsg('')
+    const res = await fetch('/api/lodgify-sync', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ mode, overwrite: overwrite || fullSyncOverwrite }),
+    })
     const j = await res.json()
     if (j.error) setSyncMsg('❌ '+j.error)
     else if (mode==='full_sync') setSyncMsg(`✅ Komplett-Sync: ${j.regular} Buchungen importiert`)
@@ -362,6 +369,16 @@ export default function DashboardPage() {
     setSyncing(false); setTimeout(()=>setSyncMsg(''),8000)
     fetch('/api/bookings?limit=1000').then(r=>r.json()).then(d=>setBookings(d.data??[]))
   }
+
+  const todayStr = now.toISOString().slice(0,10)
+  const setToday = () => { setFrom(todayStr); setTo(todayStr) }
+  const setMonth = (year: number, month: number) => {
+    const last = new Date(year, month, 0).getDate()
+    setFrom(`${year}-${String(month).padStart(2,'0')}-01`)
+    setTo(`${year}-${String(month).padStart(2,'0')}-${String(last).padStart(2,'0')}`)
+  }
+  const setYear = (year: number) => { setFrom(`${year}-01-01`); setTo(`${year}-12-31`) }
+  const MONTH_SHORT = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez']
 
   const handlePrint = () => {
     const kpiList = kpis ? [
@@ -436,6 +453,28 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Date shortcuts */}
+      <div className="no-print flex flex-wrap items-center gap-1.5">
+        <button onClick={setToday}
+          className="text-xs px-2.5 py-1 rounded-md font-semibold border bg-blue-600 text-white border-blue-600 hover:bg-blue-700 transition-colors">
+          Heute
+        </button>
+        <span className="text-gray-200 text-xs">|</span>
+        {MONTH_SHORT.map((m, i) => (
+          <button key={i} onClick={() => setMonth(thisYear, i + 1)}
+            className="text-xs px-2 py-1 rounded-md border border-gray-200 bg-white text-gray-600 hover:border-blue-300 hover:text-blue-700 transition-colors">
+            {m}
+          </button>
+        ))}
+        <span className="text-gray-200 text-xs">|</span>
+        {[thisYear - 2, thisYear - 1, thisYear, thisYear + 1].map(y => (
+          <button key={y} onClick={() => setYear(y)}
+            className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${from.startsWith(String(y)) && to.startsWith(String(y)) ? 'bg-gray-800 text-white border-gray-800' : 'border-gray-200 bg-white text-gray-600 hover:border-blue-300 hover:text-blue-700'}`}>
+            {y}
+          </button>
+        ))}
+      </div>
+
       {syncMsg && <div className={`text-sm px-4 py-2 rounded-lg ${syncMsg.startsWith('✅')?'bg-green-50 text-green-700':'bg-red-50 text-red-700'}`}>{syncMsg}</div>}
 
       {/* Langzeitbuchungen Filter */}
@@ -468,11 +507,37 @@ export default function DashboardPage() {
                 <div className="font-semibold text-blue-900 mb-1">➕ Nur neue Buchungen</div>
                 <div className="text-xs text-blue-700">Bereits vorhandene Buchungen bleiben unverändert.</div>
               </button>
-              <button className="w-full text-left p-4 rounded-xl border-2 border-red-200 bg-red-50 hover:bg-red-100 transition-colors"
-                onClick={()=>{ if(confirm('⚠️ Alle bestehenden Buchungen werden gelöscht und komplett neu aus Lodgify importiert. Fortfahren?')) handleLodgifySync('full_sync') }}>
-                <div className="font-semibold text-red-900 mb-1">🔁 Komplett neu synchronisieren</div>
-                <div className="text-xs text-red-700">Alle bestehenden Buchungen werden gelöscht und vollständig neu importiert.</div>
-              </button>
+              <div className="rounded-xl border-2 border-red-200 bg-red-50">
+                <button className="w-full text-left p-4 hover:bg-red-100 transition-colors rounded-xl"
+                  onClick={()=>setFullSyncOptions(v=>!v)}>
+                  <div className="font-semibold text-red-900 mb-1">🔁 Komplett neu synchronisieren {fullSyncOptions ? '▲' : '▼'}</div>
+                  <div className="text-xs text-red-700">Alle bestehenden Buchungen werden gelöscht und vollständig neu importiert.</div>
+                </button>
+                {fullSyncOptions && (
+                  <div className="px-4 pb-4 space-y-2">
+                    <p className="text-xs font-semibold text-red-800 mb-2">Was soll überschrieben werden?</p>
+                    {([
+                      ['gastdaten','Gastdaten (Name, E-Mail, Telefon, Herkunft)'],
+                      ['preise','Preise (Gesamtpreis, Tagespreis)'],
+                      ['status','Status (Bestätigt, Eingecheckt, ...)'],
+                      ['zahlung','Zahlung (Zahlungsstatus, -methode)'],
+                      ['notizen','Notizen (intern & Gast)'],
+                    ] as [keyof typeof fullSyncOverwrite, string][]).map(([key, label]) => (
+                      <label key={key} className="flex items-center gap-2 text-sm text-red-900 cursor-pointer">
+                        <input type="checkbox" checked={fullSyncOverwrite[key]}
+                          onChange={e => setFullSyncOverwrite(o => ({ ...o, [key]: e.target.checked }))}
+                          className="rounded" />
+                        {label}
+                      </label>
+                    ))}
+                    <button
+                      className="mt-3 w-full py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-colors"
+                      onClick={() => handleLodgifySync('full_sync', fullSyncOverwrite)}>
+                      Jetzt komplett neu importieren
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="flex justify-end"><button className="btn-secondary text-sm" onClick={()=>setSyncModeModal(false)}>Abbrechen</button></div>
           </div>

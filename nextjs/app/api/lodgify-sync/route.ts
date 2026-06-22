@@ -188,17 +188,52 @@ export async function POST(request: Request) {
 
   if (!unique.length) return NextResponse.json({ synced: 0, total: 0 })
 
-  // full_sync: clear deleted-list, delete all bookings, re-import everything fresh
+  // Field groups for selective full_sync
+  // overwrite: { gastdaten, preise, status, zahlung, notizen } — all true by default
+  let overwrite = { gastdaten: true, preise: true, status: true, zahlung: true, notizen: true }
+  try { const body2 = await request.clone().json(); if (body2.overwrite) overwrite = { ...overwrite, ...body2.overwrite } } catch (_) {}
+
+  const FIELD_GROUPS: Record<string, string[]> = {
+    gastdaten: ['guest_name','guest_email','guest_phone','company_name','nationality','guest_count','adults','children'],
+    preise:    ['total_price','daily_rate','currency'],
+    status:    ['status'],
+    zahlung:   ['payment_status','payment_method'],
+    notizen:   ['internal_notes','guest_notes','block_reason'],
+  }
+
+  // full_sync: preserve selected field groups from existing bookings, then re-import
   if (mode === 'full_sync') {
+    // Fetch existing bookings keyed by external_reference to preserve non-overwritten data
+    const { data: existingForFull } = await supabase.from('bookings').select('*')
+    const existingByRef: Record<string, any> = {}
+    ;(existingForFull || []).forEach((e: any) => { if (e.external_reference) existingByRef[e.external_reference] = e })
+
     await supabase.from('deleted_bookings').delete().neq('external_reference', '')
     const { error: delErr } = await supabase.from('bookings').delete().neq('id', 0)
     if (delErr) return NextResponse.json({ error: 'Löschen fehlgeschlagen: ' + delErr.message }, { status: 500 })
-    const { error: insErr } = await supabase.from('bookings').insert(unique)
+
+    // Merge: for each group not overwritten, restore old values
+    const toInsertFull = unique.map(b => {
+      const old = existingByRef[b.external_reference]
+      if (!old) return b
+      const merged = { ...b }
+      for (const [group, fields] of Object.entries(FIELD_GROUPS)) {
+        if (!(overwrite as any)[group]) {
+          for (const f of fields) { if (old[f] !== undefined) merged[f] = old[f] }
+        }
+      }
+      // Always preserve invoice_number and manual_fields
+      if (old.invoice_number) merged.invoice_number = old.invoice_number
+      if (old.manual_fields?.length) merged.manual_fields = old.manual_fields
+      return merged
+    })
+
+    const { error: insErr } = await supabase.from('bookings').insert(toInsertFull)
     if (insErr) return NextResponse.json({ error: 'Import fehlgeschlagen: ' + insErr.message }, { status: 500 })
     return NextResponse.json({
-      synced: unique.length, inserted: unique.length, updated: 0, deleted: 'all',
-      regular: unique.filter(b => !b.is_owner_block).length,
-      ownerBlocks: unique.filter(b => b.is_owner_block).length,
+      synced: toInsertFull.length, inserted: toInsertFull.length, updated: 0, deleted: 'all',
+      regular: toInsertFull.filter(b => !b.is_owner_block).length,
+      ownerBlocks: toInsertFull.filter(b => b.is_owner_block).length,
       syncedAt: new Date().toISOString(),
     })
   }
@@ -210,7 +245,7 @@ export async function POST(request: Request) {
   // Fetch ALL existing bookings to match by external_reference OR by house+dates
   const { data: allExisting } = await supabase
     .from('bookings')
-    .select('id, external_reference, house_id, checkin_date, checkout_date, invoice_number')
+    .select('id, external_reference, house_id, checkin_date, checkout_date, invoice_number, manual_fields')
 
   // Match by external_reference first, then fallback to house_id+checkin+checkout
   const byExtRef: Record<string, any> = {}
@@ -225,33 +260,31 @@ export async function POST(request: Request) {
   const toUpdate: any[] = []
 
   for (const b of unique) {
-    // Skip bookings that were manually deleted
     if (deletedRefs.has(b.external_reference)) continue
-
     const byRef = byExtRef[b.external_reference]
     const dk = `${b.house_id}|${b.checkin_date}|${b.checkout_date}`
     const byDate = !byRef ? byDateKey[dk] : null
     const match = byRef || byDate
-
-    if (match) {
-      toUpdate.push({ booking: b, existing: match })
-    } else {
-      toInsert.push(b)
-    }
+    if (match) toUpdate.push({ booking: b, existing: match })
+    else toInsert.push(b)
   }
 
   let errors: string[] = []
 
-  // Insert truly new bookings
   if (toInsert.length) {
     const { error } = await supabase.from('bookings').insert(toInsert)
     if (error) errors.push('insert: ' + error.message)
   }
 
-  // Update existing — preserve invoice_number, set external_reference if missing
+  // Update existing — skip fields the user manually changed
   for (const { booking, existing } of toUpdate) {
     const payload: any = { ...booking }
+    const manualFields: string[] = existing.manual_fields || []
+    for (const f of manualFields) { if (f in payload) delete payload[f] }
+    // Always preserve invoice_number
     if (existing.invoice_number) payload.invoice_number = existing.invoice_number
+    // Preserve the manual_fields list itself
+    payload.manual_fields = manualFields
     const { error } = await supabase.from('bookings').update(payload).eq('id', existing.id)
     if (error) errors.push(`update ${booking.external_reference}: ${error.message}`)
   }
