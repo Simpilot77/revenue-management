@@ -188,8 +188,9 @@ export async function POST(request: Request) {
 
   if (!unique.length) return NextResponse.json({ synced: 0, total: 0 })
 
-  // full_sync: delete all bookings first, then insert everything fresh
+  // full_sync: clear deleted-list, delete all bookings, re-import everything fresh
   if (mode === 'full_sync') {
+    await supabase.from('deleted_bookings').delete().neq('external_reference', '')
     const { error: delErr } = await supabase.from('bookings').delete().neq('id', 0)
     if (delErr) return NextResponse.json({ error: 'Löschen fehlgeschlagen: ' + delErr.message }, { status: 500 })
     const { error: insErr } = await supabase.from('bookings').insert(unique)
@@ -201,6 +202,10 @@ export async function POST(request: Request) {
       syncedAt: new Date().toISOString(),
     })
   }
+
+  // Load manually-deleted external references to skip on new_only sync
+  const { data: deletedRows } = await supabase.from('deleted_bookings').select('external_reference')
+  const deletedRefs = new Set((deletedRows || []).map((r: any) => r.external_reference))
 
   // Fetch ALL existing bookings to match by external_reference OR by house+dates
   const { data: allExisting } = await supabase
@@ -220,6 +225,9 @@ export async function POST(request: Request) {
   const toUpdate: any[] = []
 
   for (const b of unique) {
+    // Skip bookings that were manually deleted
+    if (deletedRefs.has(b.external_reference)) continue
+
     const byRef = byExtRef[b.external_reference]
     const dk = `${b.house_id}|${b.checkin_date}|${b.checkout_date}`
     const byDate = !byRef ? byDateKey[dk] : null
