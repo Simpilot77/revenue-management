@@ -3,25 +3,37 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { useEffect, useState } from 'react'
 
 export const dynamic = 'force-dynamic'
 
 const NAV = [
-  { href: '/dashboard',  label: 'Dashboard',     icon: '🏠' },
-  { href: '/bookings',   label: 'Buchungen',      icon: '📋' },
-  { href: '/calendar',   label: 'Kalender',       icon: '📅' },
-  { href: '/tasks',      label: 'Aufgaben',       icon: '✅' },
-  { href: '/cleaning',   label: 'Reinigung',      icon: '🧹' },
-  { href: '/reports',    label: 'Auswertungen',   icon: '📊' },
-  { href: '/invoices',   label: 'Rechnungen',     icon: '🧾' },
-  { href: '/customers',  label: 'Kunden',         icon: '👥' },
-  { href: '/users',      label: 'Benutzer',       icon: '👤' },
-  { href: '/settings',   label: 'Einstellungen',  icon: '⚙️' },
+  { href: '/dashboard',  label: 'Dashboard',     icon: '🏠',  key: 'dashboard' },
+  { href: '/bookings',   label: 'Buchungen',      icon: '📋',  key: 'bookings' },
+  { href: '/calendar',   label: 'Kalender',       icon: '📅',  key: 'calendar' },
+  { href: '/tasks',      label: 'Aufgaben',       icon: '✅',  key: 'tasks' },
+  { href: '/cleaning',   label: 'Reinigung',      icon: '🧹',  key: 'cleaning' },
+  { href: '/reports',    label: 'Auswertungen',   icon: '📊',  key: 'reports' },
+  { href: '/invoices',   label: 'Rechnungen',     icon: '🧾',  key: 'invoices' },
+  { href: '/customers',  label: 'Kunden',         icon: '👥',  key: 'customers' },
+  { href: '/users',      label: 'Benutzer',       icon: '👤',  key: 'users' },
+  { href: '/settings',   label: 'Einstellungen',  icon: '⚙️', key: 'settings' },
 ]
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
+  const [pages, setPages] = useState<Record<string, boolean> | null>(null)
+  const [isAdmin, setIsAdmin] = useState(true)
+
+  useEffect(() => {
+    fetch('/api/users/me/permissions').then(r => r.json()).then(d => {
+      setIsAdmin(d.isAdmin)
+      setPages(d.pages)
+    }).catch(() => {})
+  }, [])
+
+  const canAccess = (key: string) => isAdmin || pages === null || !!pages[key]
 
   async function logout() {
     const supabase = createClient()
@@ -39,7 +51,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="text-xs text-white/50 mt-0.5">Wolfsburg</div>
         </div>
         <nav className="flex-1 px-2 py-3 space-y-0.5">
-          {NAV.map(item => {
+          {NAV.filter(item => canAccess(item.key)).map(item => {
             const active = pathname === item.href || pathname.startsWith(item.href + '/')
             return (
               <Link
