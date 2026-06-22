@@ -10,7 +10,7 @@ const COLORS = ['#2563eb','#16a34a','#d97706','#dc2626','#7c3aed','#0891b2','#be
 
 function fmtEur(n: number) { return new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(n??0) }
 function fmtDate(d: string) { if(!d)return''; return new Date(d).toLocaleDateString('de-DE') }
-function fmtPct(n: number) { return `${Math.round(n)}%` }
+function fmtPct(n: number) { return `${(n??0).toFixed(1)}%` }
 
 const STATUS_LABEL: Record<string,string> = { bestaetigt:'Bestätigt', eingecheckt:'Eingecheckt', ausgecheckt:'Ausgecheckt', angefragt:'Angefragt', storniert:'Storniert', no_show:'No-Show', gesperrt:'Gesperrt' }
 const STATUS_COLOR: Record<string,string> = { bestaetigt:'bg-blue-100 text-blue-700', eingecheckt:'bg-green-100 text-green-700', ausgecheckt:'bg-gray-100 text-gray-600', angefragt:'bg-amber-100 text-amber-700', storniert:'bg-gray-100 text-gray-400', no_show:'bg-orange-100 text-orange-700' }
@@ -386,9 +386,9 @@ export default function ReportsPage() {
                   <BarChart data={monthly}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                     <XAxis dataKey="name" tick={{fontSize:11}} />
-                    <YAxis yAxisId="l" tickFormatter={v=>`${v}%`} tick={{fontSize:10}} />
+                    <YAxis yAxisId="l" tickFormatter={v=>`${(+v).toFixed(1)}%`} tick={{fontSize:10}} />
                     <YAxis yAxisId="r" orientation="right" tickFormatter={v=>`${v}€`} tick={{fontSize:10}} />
-                    <Tooltip />
+                    <Tooltip formatter={(v:any,name:any)=>name==='Auslastung %'?[`${(+v).toFixed(1)}%`,name]:[fmtEur(+v),name]} labelStyle={{fontWeight:600}} />
                     <Bar yAxisId="l" dataKey="occupancy" radius={[4,4,0,0]} name="Auslastung %">
                       {monthly.map((r,i)=><Cell key={i} fill={r.occupancy>=70?'#16a34a':r.occupancy>=40?'#f59e0b':'#ef4444'} />)}
                     </Bar>
