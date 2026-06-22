@@ -100,6 +100,7 @@ export default function UsersPage() {
   const [showInvitePerms, setShowInvitePerms] = useState(false)
   const [inviting, setInviting] = useState(false)
   const [msg, setMsg] = useState('')
+  const [inviteLink, setInviteLink] = useState('')
   const [expandedUser, setExpandedUser] = useState<string | null>(null)
 
   const load = () => {
@@ -122,7 +123,8 @@ export default function UsersPage() {
     const data = await res.json()
     setInviting(false)
     if (res.ok) {
-      setMsg('✅ Einladung gesendet an ' + inviteEmail)
+      setInviteLink(data.link || '')
+      setMsg('✅ Einladungslink erstellt für ' + inviteEmail)
       setInviteEmail('')
       setShowInvitePerms(false)
       setInvitePages(DEFAULT_PAGES)
@@ -130,7 +132,6 @@ export default function UsersPage() {
     } else {
       setMsg('❌ Fehler: ' + (data.error || 'Unbekannt'))
     }
-    setTimeout(() => setMsg(''), 4000)
   }
 
   const deleteUser = async (id: string, email: string) => {
@@ -185,6 +186,27 @@ export default function UsersPage() {
         )}
 
         {msg && <p className="text-sm">{msg}</p>}
+
+        {inviteLink && (
+          <div className="bg-green-50 border border-green-200 rounded-xl p-4 space-y-2">
+            <p className="text-sm font-semibold text-green-800">Einladungslink — bitte manuell per E-Mail weiterleiten:</p>
+            <div className="flex gap-2 items-center">
+              <input
+                readOnly
+                value={inviteLink}
+                className="flex-1 text-xs bg-white border border-green-200 rounded-lg px-3 py-2 text-gray-700 select-all"
+                onClick={e => (e.target as HTMLInputElement).select()}
+              />
+              <button
+                onClick={() => { navigator.clipboard.writeText(inviteLink); setMsg('📋 Link kopiert!') }}
+                className="shrink-0 bg-green-600 text-white rounded-lg px-3 py-2 text-sm font-medium hover:bg-green-700">
+                Kopieren
+              </button>
+            </div>
+            <p className="text-xs text-green-700">Der Link ist einmalig gültig. Der Benutzer kann damit ein Passwort setzen und sich anmelden.</p>
+            <button onClick={() => setInviteLink('')} className="text-xs text-green-600 hover:underline">Link ausblenden</button>
+          </div>
+        )}
       </div>
 
       {/* User list */}

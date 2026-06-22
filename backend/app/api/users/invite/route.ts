@@ -7,7 +7,12 @@ export async function POST(req: Request) {
   if (!email) return NextResponse.json({ error: 'E-Mail fehlt' }, { status: 400 })
 
   const admin = createAdminClient()
-  const { data, error } = await admin.auth.admin.inviteUserByEmail(email)
+
+  // Generate invite link instead of sending email
+  const { data, error } = await admin.auth.admin.generateLink({
+    type: 'invite',
+    email,
+  })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   // Save page permissions right after invite
@@ -21,5 +26,6 @@ export async function POST(req: Request) {
     })
   }
 
-  return NextResponse.json({ ok: true, user: data?.user })
+  const link = data?.properties?.action_link
+  return NextResponse.json({ ok: true, user: data?.user, link })
 }
