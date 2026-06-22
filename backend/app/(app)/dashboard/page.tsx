@@ -371,7 +371,7 @@ export default function DashboardPage() {
   }
 
   const todayStr = now.toISOString().slice(0,10)
-  const setToday = () => { setFrom(todayStr); setTo(todayStr) }
+  const setToday = () => { setTo(todayStr) }
   const setMonth = (year: number, month: number) => {
     const last = new Date(year, month, 0).getDate()
     setFrom(`${year}-${String(month).padStart(2,'0')}-01`)
