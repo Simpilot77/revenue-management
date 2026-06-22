@@ -603,12 +603,21 @@ async function buildInvoiceDoc(data: any): Promise<jsPDF> {
 
 export async function exportInvoiceFromData(data: any) {
   const doc = await buildInvoiceDoc(data)
-  doc.save(data._filename || 'rechnung.pdf')
+  const blob = doc.output('blob')
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = data._filename || 'rechnung.pdf'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(url), 10000)
 }
 
 export async function previewInvoiceFromData(data: any): Promise<string> {
   const doc = await buildInvoiceDoc(data)
-  return doc.output('bloburl') as string
+  const blob = doc.output('blob')
+  return URL.createObjectURL(blob)
 }
 
 // Alias
