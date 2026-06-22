@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { exportInvoiceFromData } from '../tasks/pdfExport'
+import { exportInvoiceFromData, previewInvoiceFromData } from '../tasks/pdfExport'
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -72,6 +72,8 @@ interface Props {
 
 export default function InvoicePreviewModal({ data, onClose, onLangChange, onChange, onRecorded, settings }: Props) {
   const [generating, setGenerating] = useState(false)
+  const [previewing, setPreviewing] = useState(false)
+  const [generateError, setGenerateError] = useState('')
   const [autoLoading, setAutoLoading] = useState(false)
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [periodDates, setPeriodDates] = useState(() => parseServicePeriod(data.service_period))
@@ -123,12 +125,26 @@ export default function InvoicePreviewModal({ data, onClose, onLangChange, onCha
   const updateExtraItem = (i: number, field: string, value: any) =>
     setExtraItems(extraItems.map((item: any, idx: number) => idx === i ? { ...item, [field]: value } : item))
 
+  const handlePreview = async () => {
+    setPreviewing(true)
+    setGenerateError('')
+    try {
+      const url = await previewInvoiceFromData(data)
+      window.open(url, '_blank')
+    } catch (e: any) {
+      setGenerateError('Vorschau-Fehler: ' + (e?.message || String(e)))
+    } finally {
+      setPreviewing(false)
+    }
+  }
+
   const handleGenerate = async () => {
     setGenerating(true)
+    setGenerateError('')
     try {
       await exportInvoiceFromData(data)
       if (data._booking_id) {
-        await fetch('/api/invoices', {
+        const invRes = await fetch('/api/invoices', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -144,6 +160,10 @@ export default function InvoicePreviewModal({ data, onClose, onLangChange, onCha
             data,
           }),
         })
+        if (!invRes.ok) {
+          const err = await invRes.json().catch(() => ({}))
+          throw new Error('Rechnung speichern: ' + (err.error || invRes.status))
+        }
         if (data._type !== 'storno' && data.invoice_number) {
           await fetch(`/api/bookings/${data._booking_id}`, {
             method: 'PUT',
@@ -153,9 +173,11 @@ export default function InvoicePreviewModal({ data, onClose, onLangChange, onCha
         }
         onRecorded?.()
       }
-    } finally {
       setGenerating(false)
       onClose()
+    } catch (e: any) {
+      setGenerating(false)
+      setGenerateError('Fehler: ' + (e?.message || String(e)))
     }
   }
 
@@ -551,17 +573,29 @@ export default function InvoicePreviewModal({ data, onClose, onLangChange, onCha
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
-          <p className="text-xs text-gray-400">Änderungen gelten nur für diese Rechnung.</p>
-          <div className="flex gap-3">
-            <button type="button"
-              className="border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-medium px-4 py-2 rounded-lg"
-              onClick={onClose}>Abbrechen</button>
-            <button type="button"
-              className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-5 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
-              onClick={handleGenerate} disabled={generating}>
-              {generating ? '⏳ Erstelle PDF…' : '📄 PDF erstellen & herunterladen'}
-            </button>
+        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl space-y-2">
+          {generateError && (
+            <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              ❌ {generateError}
+            </div>
+          )}
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-gray-400">Änderungen gelten nur für diese Rechnung.</p>
+            <div className="flex gap-2">
+              <button type="button"
+                className="border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-medium px-4 py-2 rounded-lg"
+                onClick={onClose}>Abbrechen</button>
+              <button type="button"
+                className="border border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100 text-sm font-medium px-4 py-2 rounded-lg flex items-center gap-1.5 disabled:opacity-50"
+                onClick={handlePreview} disabled={previewing || generating}>
+                {previewing ? '⏳' : '👁'} Vorschau
+              </button>
+              <button type="button"
+                className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-5 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
+                onClick={handleGenerate} disabled={generating || previewing}>
+                {generating ? '⏳ Erstelle PDF…' : '📄 PDF erstellen & herunterladen'}
+              </button>
+            </div>
           </div>
         </div>
       </div>

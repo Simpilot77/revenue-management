@@ -373,7 +373,7 @@ export function buildPartialInvoicePreviewData(booking: any, fraction: number, l
 
 // ─── Generate PDF from preview data ─────────────────────────────────────────
 
-export async function exportInvoiceFromData(data: any) {
+async function buildInvoiceDoc(data: any): Promise<jsPDF> {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const W = 210
   const H = 297
@@ -598,7 +598,17 @@ export async function exportInvoiceFromData(data: any) {
     })
   })
 
+  return doc
+}
+
+export async function exportInvoiceFromData(data: any) {
+  const doc = await buildInvoiceDoc(data)
   doc.save(data._filename || 'rechnung.pdf')
+}
+
+export async function previewInvoiceFromData(data: any): Promise<string> {
+  const doc = await buildInvoiceDoc(data)
+  return doc.output('bloburl') as string
 }
 
 // Alias
