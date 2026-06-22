@@ -146,11 +146,12 @@ export default function UsersPage() {
 
       {/* Invite form */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 space-y-4">
-        <h2 className="font-semibold text-gray-800">Neuen Benutzer einladen</h2>
+        <h2 className="font-semibold text-gray-800">Einladungslink erstellen</h2>
+        <p className="text-xs text-gray-400">E-Mail-Adresse des neuen Benutzers eingeben → Link generieren → Link selbst per E-Mail verschicken.</p>
         <div className="flex gap-2">
           <input type="email"
             className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="E-Mail-Adresse…" value={inviteEmail}
+            placeholder="E-Mail-Adresse des neuen Benutzers…" value={inviteEmail}
             onChange={e => setInviteEmail(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && invite()} />
           <button onClick={() => setShowInvitePerms(v => !v)}
@@ -159,7 +160,7 @@ export default function UsersPage() {
           </button>
           <button onClick={invite} disabled={inviting || !inviteEmail.trim()}
             className="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-            {inviting ? 'Sende…' : 'Einladen'}
+            {inviting ? '⏳ Erstelle…' : '🔗 Link erstellen'}
           </button>
         </div>
 
