@@ -750,11 +750,16 @@ function TasksInner() {
 
   const onToggle = async (bookingId: number, key: string, value: boolean) => {
     setTasksMap(prev => ({ ...prev, [bookingId]: { ...(prev[bookingId] || {}), [key]: value } }))
-    await fetch(`/api/booking-tasks/${bookingId}`, {
+    const res = await fetch(`/api/booking-tasks/${bookingId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ [key]: value }),
     })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      console.error('booking-tasks PUT failed', err)
+      setTasksMap(prev => ({ ...prev, [bookingId]: { ...(prev[bookingId] || {}), [key]: !value } }))
+    }
   }
 
   const FILTERS = [
