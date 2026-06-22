@@ -57,28 +57,66 @@ export default function ReportsPage() {
     return excludeLongStay ? base.filter(b => (b.nights||0) <= longStayThreshold) : base
   }, [bookings, excludeLongStay, longStayThreshold])
 
-  // ── Monthly (spans full date range) ──────────────────────────────────────
+  // ── Monthly by checkin date (original) ───────────────────────────────────
   const monthly = useMemo(() => {
     const fy = parseInt(from.slice(0,4)), fm = parseInt(from.slice(5,7))
     const ty = parseInt(to.slice(0,4)),   tm = parseInt(to.slice(5,7))
-    const months: any[] = []
+    const months: {y:number,mo0:number}[] = []
     for (let y = fy; y <= ty; y++) {
       const mStart = y===fy ? fm : 1, mEnd = y===ty ? tm : 12
-      for (let mo = mStart; mo <= mEnd; mo++) {
-        const mo0 = mo - 1 // 0-indexed for daysInMonth
-        const days = daysInMonth(y, mo0)
-        const bs = active.filter(b => b.checkin_date &&
-          new Date(b.checkin_date).getFullYear()===y && new Date(b.checkin_date).getMonth()===mo0)
-        const revenue = bs.reduce((s,b)=>s+parseFloat(b.total_price||0),0)
-        const nights  = bs.reduce((s,b)=>s+(b.nights||0),0)
-        const availableNights = days * (houses.length||1)
-        const occupancy = availableNights>0 ? (nights/availableNights)*100 : 0
-        const adr = nights>0 ? revenue/nights : 0
-        months.push({ name:`${MONTHS[mo0]} ${y}`, month:mo0, year:y, revenue, nights, bookings:bs.length, occupancy, adr, availableNights })
-      }
+      for (let mo = mStart; mo <= mEnd; mo++) months.push({y, mo0: mo-1})
     }
-    return months
+    return months.map(({y, mo0}) => {
+      const days = daysInMonth(y, mo0)
+      const bs = active.filter(b => b.checkin_date &&
+        new Date(b.checkin_date).getFullYear()===y && new Date(b.checkin_date).getMonth()===mo0)
+      const revenue = bs.reduce((s,b)=>s+parseFloat(b.total_price||0),0)
+      const nights  = bs.reduce((s,b)=>s+(b.nights||0),0)
+      const availableNights = days * (houses.length||1)
+      const occupancy = availableNights>0 ? (nights/availableNights)*100 : 0
+      const adr = nights>0 ? revenue/nights : 0
+      return { name:`${MONTHS[mo0]} ${y}`, month:mo0, year:y, revenue, nights, bookings:bs.length, occupancy, adr, availableNights }
+    })
   }, [active, from, to, houses])
+
+  // ── Monthly by booking_date (Eingangsdatum) ───────────────────────────────
+  const monthlyByBookingDate = useMemo(() => {
+    const fy = parseInt(from.slice(0,4)), fm = parseInt(from.slice(5,7))
+    const ty = parseInt(to.slice(0,4)),   tm = parseInt(to.slice(5,7))
+    const months: {y:number,mo0:number}[] = []
+    for (let y = fy; y <= ty; y++) {
+      const mStart = y===fy ? fm : 1, mEnd = y===ty ? tm : 12
+      for (let mo = mStart; mo <= mEnd; mo++) months.push({y, mo0: mo-1})
+    }
+    return months.map(({y, mo0}) => {
+      const bs = active.filter(b => b.booking_date &&
+        new Date(b.booking_date).getFullYear()===y && new Date(b.booking_date).getMonth()===mo0)
+      const revenue = bs.reduce((s,b)=>s+parseFloat(b.total_price||0),0)
+      return { name:`${MONTHS[mo0]} ${y}`, month:mo0, year:y, revenue, bookings:bs.length }
+    })
+  }, [active, from, to])
+
+  // ── Monthly by accrual (Umsatz anteilig auf belegte Tage) ─────────────────
+  const monthlyAccrual = useMemo(() => {
+    const fy = parseInt(from.slice(0,4)), fm = parseInt(from.slice(5,7))
+    const ty = parseInt(to.slice(0,4)),   tm = parseInt(to.slice(5,7))
+    const months: {y:number,mo0:number}[] = []
+    for (let y = fy; y <= ty; y++) {
+      const mStart = y===fy ? fm : 1, mEnd = y===ty ? tm : 12
+      for (let mo = mStart; mo <= mEnd; mo++) months.push({y, mo0: mo-1})
+    }
+    return months.map(({y, mo0}) => {
+      let revenue = 0, nights = 0
+      active.forEach(b => {
+        const overlap = overlapNights(b.checkin_date?.slice(0,10)||'', b.checkout_date?.slice(0,10)||'', y, mo0)
+        if (!overlap) return
+        const totalN = b.nights || 1
+        revenue += (parseFloat(b.total_price||0) / totalN) * overlap
+        nights += overlap
+      })
+      return { name:`${MONTHS[mo0]} ${y}`, month:mo0, year:y, revenue:Math.round(revenue), nights }
+    })
+  }, [active, from, to])
 
   // ── Occupancy per house per month ────────────────────────────────────────
   const occupancyByHouse = useMemo(() => {
@@ -307,58 +345,92 @@ export default function ReportsPage() {
           {/* Tab 0: Monatlich */}
           {tab===0 && (
             <div className="space-y-5">
+              {/* Revenue comparison: by booking date vs accrual */}
               <div className="grid md:grid-cols-2 gap-5">
                 <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-                  <h2 className="font-semibold text-gray-800 mb-4">Umsatz pro Monat</h2>
+                  <h2 className="font-semibold text-gray-800 mb-0.5">Umsatz nach Buchungsdatum</h2>
+                  <p className="text-xs text-gray-400 mb-4">Gesamtbetrag der Buchungen, die in dem Monat <em>eingegangen</em> sind</p>
                   <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={monthly}>
+                    <BarChart data={monthlyByBookingDate}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                       <XAxis dataKey="name" tick={{fontSize:11}} />
                       <YAxis tickFormatter={v=>fmtEur(v)} tick={{fontSize:10}} width={70} />
-                      <Tooltip formatter={(v:any)=>fmtEur(v)} />
-                      <Bar dataKey="revenue" radius={[4,4,0,0]} name="Umsatz">
-                        {monthly.map((r,i)=><Cell key={i} fill={r.revenue>=10000?'#16a34a':r.revenue>=5000?'#2563eb':'#ef4444'} />)}
+                      <Tooltip formatter={(v:any)=>fmtEur(v)} labelStyle={{fontWeight:600}} />
+                      <Bar dataKey="revenue" radius={[4,4,0,0]} name="Umsatz (Buchungsdatum)">
+                        {monthlyByBookingDate.map((r,i)=><Cell key={i} fill={r.revenue>=10000?'#16a34a':r.revenue>=5000?'#2563eb':'#ef4444'} />)}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
                 <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-                  <h2 className="font-semibold text-gray-800 mb-4">Auslastung & ADR</h2>
+                  <h2 className="font-semibold text-gray-800 mb-0.5">Umsatz nach belegten Tagen (Accrual)</h2>
+                  <p className="text-xs text-gray-400 mb-4">Buchungsbetrag anteilig auf die tatsächlich <em>belegten Nächte</em> je Monat verteilt</p>
                   <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={monthly}>
+                    <BarChart data={monthlyAccrual}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                       <XAxis dataKey="name" tick={{fontSize:11}} />
-                      <YAxis yAxisId="l" tickFormatter={v=>`${v}%`} tick={{fontSize:10}} />
-                      <YAxis yAxisId="r" orientation="right" tickFormatter={v=>`${v}€`} tick={{fontSize:10}} />
-                      <Tooltip />
-                      <Bar yAxisId="l" dataKey="occupancy" radius={[4,4,0,0]} name="Auslastung %">
-                        {monthly.map((r,i)=><Cell key={i} fill={r.occupancy>=70?'#16a34a':r.occupancy>=40?'#f59e0b':'#ef4444'} />)}
+                      <YAxis tickFormatter={v=>fmtEur(v)} tick={{fontSize:10}} width={70} />
+                      <Tooltip formatter={(v:any)=>fmtEur(v)} labelStyle={{fontWeight:600}} />
+                      <Bar dataKey="revenue" radius={[4,4,0,0]} name="Umsatz (Accrual)">
+                        {monthlyAccrual.map((r,i)=><Cell key={i} fill={r.revenue>=10000?'#16a34a':r.revenue>=5000?'#8b5cf6':'#ef4444'} />)}
                       </Bar>
-                      <Bar yAxisId="r" dataKey="adr" fill="#8b5cf6" radius={[4,4,0,0]} name="ADR" />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               </div>
+
+              {/* Auslastung & ADR */}
+              <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                <h2 className="font-semibold text-gray-800 mb-4">Auslastung & ADR</h2>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={monthly}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                    <XAxis dataKey="name" tick={{fontSize:11}} />
+                    <YAxis yAxisId="l" tickFormatter={v=>`${v}%`} tick={{fontSize:10}} />
+                    <YAxis yAxisId="r" orientation="right" tickFormatter={v=>`${v}€`} tick={{fontSize:10}} />
+                    <Tooltip />
+                    <Bar yAxisId="l" dataKey="occupancy" radius={[4,4,0,0]} name="Auslastung %">
+                      {monthly.map((r,i)=><Cell key={i} fill={r.occupancy>=70?'#16a34a':r.occupancy>=40?'#f59e0b':'#ef4444'} />)}
+                    </Bar>
+                    <Bar yAxisId="r" dataKey="adr" fill="#8b5cf6" radius={[4,4,0,0]} name="ADR" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Vergleichstabelle */}
               <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="px-5 py-3 border-b border-gray-50 font-semibold text-gray-800 text-sm">Monatsübersicht</div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50 border-b">
-                      <tr>{['Monat','Buchungen','Nächte','Verf. Nächte','Auslastung','Umsatz','ADR'].map(h=>(
-                        <th key={h} className="px-4 py-2 text-left text-xs text-gray-500 uppercase">{h}</th>
-                      ))}</tr>
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs text-gray-500 uppercase">Monat</th>
+                        <th className="px-4 py-2 text-left text-xs text-gray-500 uppercase">Buchungen</th>
+                        <th className="px-4 py-2 text-left text-xs text-gray-500 uppercase">Auslastung</th>
+                        <th className="px-4 py-2 text-right text-xs text-blue-600 uppercase border-l border-gray-100">Umsatz (Buchungsdatum)</th>
+                        <th className="px-4 py-2 text-right text-xs text-purple-600 uppercase border-l border-gray-100">Umsatz (Accrual)</th>
+                        <th className="px-4 py-2 text-right text-xs text-gray-500 uppercase">ADR</th>
+                      </tr>
                     </thead>
                     <tbody>
-                      {monthly.map(r=>(
+                      {monthly.map((r,i)=>(
                         <tr key={r.month} className="border-t border-gray-50 hover:bg-gray-50">
                           <td className="px-4 py-2 font-medium text-gray-900">{r.name}</td>
                           <td className="px-4 py-2 text-gray-700">{r.bookings}</td>
-                          <td className="px-4 py-2 text-gray-700">{r.nights}</td>
-                          <td className="px-4 py-2 text-gray-700">{r.availableNights}</td>
                           <td className="px-4 py-2"><span className={`text-xs px-2 py-0.5 rounded-full font-medium ${occColor(r.occupancy)}`}>{fmtPct(r.occupancy)}</span></td>
-                          <td className="px-4 py-2 font-medium text-gray-900">{fmtEur(r.revenue)}</td>
-                          <td className="px-4 py-2 text-gray-700">{fmtEur(r.adr)}</td>
+                          <td className="px-4 py-2 text-right font-medium text-blue-700 border-l border-gray-100">{fmtEur(monthlyByBookingDate[i]?.revenue??0)}</td>
+                          <td className="px-4 py-2 text-right font-medium text-purple-700 border-l border-gray-100">{fmtEur(monthlyAccrual[i]?.revenue??0)}</td>
+                          <td className="px-4 py-2 text-right text-gray-700">{fmtEur(r.adr)}</td>
                         </tr>
                       ))}
+                      <tr className="border-t-2 border-gray-200 bg-gray-50 font-semibold">
+                        <td className="px-4 py-2 text-gray-900">Gesamt</td>
+                        <td className="px-4 py-2 text-gray-700">{monthly.reduce((s,r)=>s+r.bookings,0)}</td>
+                        <td className="px-4 py-2"></td>
+                        <td className="px-4 py-2 text-right text-blue-700 border-l border-gray-100">{fmtEur(monthlyByBookingDate.reduce((s,r)=>s+r.revenue,0))}</td>
+                        <td className="px-4 py-2 text-right text-purple-700 border-l border-gray-100">{fmtEur(monthlyAccrual.reduce((s,r)=>s+r.revenue,0))}</td>
+                        <td className="px-4 py-2"></td>
+                      </tr>
                     </tbody>
                   </table>
                 </div>
