@@ -540,6 +540,7 @@ export default function CalendarPage() {
               <p className="text-xs text-gray-400">{bookingActionPopup.booking.house_name}</p>
             </div>
             <button className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-2" onClick={() => { router.push(`/bookings/${bookingActionPopup.booking.id}`); setBookingActionPopup(null) }}>✏️ Buchung bearbeiten</button>
+            <button className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-2" onClick={() => { router.push(`/tasks?booking=${bookingActionPopup.booking.id}`); setBookingActionPopup(null) }}>📋 Zu den Aufgaben</button>
             <button className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2" onClick={() => { setDeleteConfirm(bookingActionPopup.booking); setBookingActionPopup(null) }}>🗑️ Buchung löschen</button>
           </div>
         </div>
@@ -836,7 +837,7 @@ function HouseCard({ house, bookings, tasks, today }: { house: any; bookings: an
           ) : (
             <>
               <div className="flex items-center gap-2"><span className="text-xs text-gray-400 w-16">Status</span><span className={`text-sm font-semibold ${cleaningDone?'text-emerald-600':'text-amber-600'}`}>{cleaningDone?'🏡 Frei':'Reinigung erforderlich'}</span></div>
-              {next && <div className="flex items-center gap-2"><span className="text-xs text-gray-400 w-16">Ankunft</span><span className="text-sm font-medium text-blue-700">{fmtDateFull(next.checkin_date)}</span>{daysUntilNext!==null&&<span className={`text-xs rounded-full px-2 py-0.5 ml-1 ${daysUntilNext===0?'bg-amber-100 text-amber-700':'bg-blue-50 text-blue-500'}`}>{daysUntilNext===0?'Heute':daysUntilNext===1?'Morgen':`in ${daysUntilNext} Tagen`}</span>}</div>}
+              {next && <div className="flex items-center gap-2"><span className="text-xs text-gray-400 w-16 shrink-0">Ankunft</span><span className="text-sm font-medium text-blue-700 truncate">{next.guest_name}</span><span className="text-xs text-gray-400 ml-1 shrink-0">· {fmtDate2(next.checkin_date)}</span>{daysUntilNext!==null&&<span className={`text-xs rounded-full px-2 py-0.5 ml-1 shrink-0 ${daysUntilNext===0?'bg-amber-100 text-amber-700':'bg-blue-50 text-blue-500'}`}>{daysUntilNext===0?'Heute':daysUntilNext===1?'Morgen':`in ${daysUntilNext}d`}</span>}</div>}
             </>
           )}
         </div>

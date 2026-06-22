@@ -17,6 +17,7 @@ const NAV = [
   { href: '/invoices',   label: 'Rechnungen',     icon: '🧾',  key: 'invoices' },
   { href: '/customers',  label: 'Kunden',         icon: '👥',  key: 'customers' },
   { href: '/users',      label: 'Benutzer',       icon: '👤',  key: 'users' },
+  { href: '/daten',      label: 'Datensicherung', icon: '🗄️', key: 'daten' },
   { href: '/settings',   label: 'Einstellungen',  icon: '⚙️', key: 'settings' },
 ]
 
