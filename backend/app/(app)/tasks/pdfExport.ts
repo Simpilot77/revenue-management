@@ -373,6 +373,16 @@ export function buildPartialInvoicePreviewData(booking: any, fraction: number, l
 
 // ─── Generate PDF from preview data ─────────────────────────────────────────
 
+// jsPDF throws "Invalid arguments" on empty string — skip those calls
+function txt(doc: any, text: string | string[], x: number, y: number, opts?: any) {
+  const safe = Array.isArray(text)
+    ? text.map(l => l || ' ')
+    : (text || ' ')
+  const isEmpty = Array.isArray(safe) ? safe.every(l => l === ' ' || !l) : !safe.trim()
+  if (isEmpty) return
+  opts ? doc.text(safe, x, y, opts) : doc.text(safe, x, y)
+}
+
 async function buildInvoiceDoc(data: any): Promise<jsPDF> {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const W = 210
@@ -394,7 +404,7 @@ async function buildInvoiceDoc(data: any): Promise<jsPDF> {
   doc.setFontSize(7.5)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...GRAY)
-  doc.text(`${s.company_name} · ${s.street} · ${s.zip} ${s.city}`, 25, 50)
+  txt(doc, `${s.company_name} · ${s.street} · ${s.zip} ${s.city}`, 25, 50)
   doc.setDrawColor(200, 200, 200)
   doc.line(25, 51.5, 115, 51.5)
 
@@ -402,17 +412,17 @@ async function buildInvoiceDoc(data: any): Promise<jsPDF> {
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...DARK)
   let ry = 58
-  if (data.company_name && !data.co_line) { doc.text(data.company_name, 25, ry); ry += 6 }
-  if (data.guest_name) { doc.text(data.guest_name, 25, ry); ry += 6 }
-  if (data.co_line) { doc.text(data.co_line, 25, ry); ry += 6 }
+  if (data.company_name && !data.co_line) { txt(doc, data.company_name, 25, ry); ry += 6 }
+  if (data.guest_name) { txt(doc, data.guest_name, 25, ry); ry += 6 }
+  if (data.co_line) { txt(doc, data.co_line, 25, ry); ry += 6 }
   if (data.billing_address_freetext) {
     const lines = data.billing_address_freetext.split('\n').filter((l: string) => l.trim())
-    lines.forEach((line: string) => { doc.text(line, 25, ry); ry += 6 })
+    lines.forEach((line: string) => { txt(doc, line, 25, ry); ry += 6 })
   } else {
-    if (data.billing_street) { doc.text(data.billing_street, 25, ry); ry += 6 }
+    if (data.billing_street) { txt(doc, data.billing_street, 25, ry); ry += 6 }
     const zipCity = `${data.billing_zip || ''} ${data.billing_city || ''}`.trim()
-    if (zipCity) { doc.text(zipCity, 25, ry); ry += 6 }
-    if (data.billing_country) { doc.text(data.billing_country, 25, ry) }
+    if (zipCity) { txt(doc, zipCity, 25, ry); ry += 6 }
+    if (data.billing_country) { txt(doc, data.billing_country, 25, ry) }
   }
 
   const metaLX = 122
@@ -432,12 +442,12 @@ async function buildInvoiceDoc(data: any): Promise<jsPDF> {
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(...GRAY)
     doc.setFontSize(8.5)
-    doc.text(label, metaLX, my)
+    txt(doc, label, metaLX, my)
     if (value) {
       doc.setFont('helvetica', valueBold ? 'bold' : 'normal')
       doc.setTextColor(...DARK)
       doc.setFontSize(valueLarge ? 10 : 8.5)
-      doc.text(value, metaVX, my, { align: 'right' })
+      txt(doc, value, metaVX, my, { align: 'right' })
     }
     my += 5.5
   })
@@ -446,23 +456,23 @@ async function buildInvoiceDoc(data: any): Promise<jsPDF> {
   doc.setFontSize(13)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...DARK)
-  doc.text(`${data._title || 'Rechnung'} Nr. ${data.invoice_number || '—'}`, 25, titleY)
+  txt(doc, `${data._title || 'Rechnung'} Nr. ${data.invoice_number || '—'}`, 25, titleY)
 
   doc.setFontSize(9.5)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...DARK)
-  doc.text(data.salutation, 25, titleY + 13)
-  const intro1Lines = doc.splitTextToSize(data.intro_line1, W - 25 - 14)
-  doc.text(intro1Lines, 25, titleY + 21)
+  txt(doc, data.salutation, 25, titleY + 13)
+  const intro1Lines = doc.splitTextToSize(data.intro_line1 || ' ', W - 25 - 14)
+  txt(doc, intro1Lines, 25, titleY + 21)
   let introY = titleY + 21 + intro1Lines.length * 5.5
   if (data.reference_line) {
     doc.setFont('helvetica', 'bold')
     const refLines = doc.splitTextToSize(data.reference_line, W - 25 - 14)
-    doc.text(refLines, 25, introY)
+    txt(doc, refLines, 25, introY)
     introY += refLines.length * 5.5
     doc.setFont('helvetica', 'normal')
   }
-  doc.text(data.intro_line2, 25, introY)
+  txt(doc, data.intro_line2, 25, introY)
   const tableStartY = introY + 9
 
   const vatRate = parseFloat(data.vat_rate || 7)
@@ -544,8 +554,8 @@ async function buildInvoiceDoc(data: any): Promise<jsPDF> {
     doc.setFontSize(bold ? 10 : 9)
     doc.setFont('helvetica', bold ? 'bold' : 'normal')
     doc.setTextColor(...DARK)
-    doc.text(label, subLX, sy + (bold ? 4 : 3))
-    doc.text(value, subRX, sy + (bold ? 4 : 3), { align: 'right' })
+    txt(doc, label, subLX, sy + (bold ? 4 : 3))
+    txt(doc, value, subRX, sy + (bold ? 4 : 3), { align: 'right' })
     sy += bold ? 7 : 5.5
   })
 
@@ -553,29 +563,29 @@ async function buildInvoiceDoc(data: any): Promise<jsPDF> {
   doc.setFontSize(9.5)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...DARK)
-  const payLines = doc.splitTextToSize(data.payment_text, W - 25 - 14)
-  doc.text(payLines, 25, sy)
+  const payLines = doc.splitTextToSize(data.payment_text || ' ', W - 25 - 14)
+  txt(doc, payLines, 25, sy)
   sy += payLines.length * 5.5 + 4
 
   doc.setFontSize(9.5)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...DARK)
-  const agb1Lines = doc.splitTextToSize(data.agb1, W - 25 - 14)
-  doc.text(agb1Lines, 25, sy)
+  const agb1Lines = doc.splitTextToSize(data.agb1 || ' ', W - 25 - 14)
+  txt(doc, agb1Lines, 25, sy)
   sy += agb1Lines.length * 5.5 + 1
-  const agb2Lines = doc.splitTextToSize(data.agb2, W - 25 - 14)
-  doc.text(agb2Lines, 25, sy)
+  const agb2Lines = doc.splitTextToSize(data.agb2 || ' ', W - 25 - 14)
+  txt(doc, agb2Lines, 25, sy)
   sy += agb2Lines.length * 5.5 + 10
 
-  const closingLines = doc.splitTextToSize(data.closing_text, W - 25 - 14)
-  doc.text(closingLines, 25, sy)
+  const closingLines = doc.splitTextToSize(data.closing_text || ' ', W - 25 - 14)
+  txt(doc, closingLines, 25, sy)
   sy += closingLines.length * 5.5 + 10
-  doc.text(data.closing, 25, sy)
+  txt(doc, data.closing, 25, sy)
   sy += 6
-  doc.text(data.owner_name, 25, sy)
+  txt(doc, data.owner_name, 25, sy)
   sy += 10
   doc.setTextColor(29, 78, 216)
-  doc.text(data.website, 25, sy)
+  txt(doc, data.website, 25, sy)
 
   const footerY = H - 26
   doc.setDrawColor(180, 180, 180)
@@ -583,10 +593,10 @@ async function buildInvoiceDoc(data: any): Promise<jsPDF> {
   doc.setFontSize(7.5)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...GRAY)
-  doc.text('1/1', W - 14, footerY - 5, { align: 'right' })
+  txt(doc, '1/1', W - 14, footerY - 5, { align: 'right' })
   const colW = (W - 28) / 4
   const footerCols = [
-    [s.company_name, s.street, `${s.zip} ${s.city}`, s.country || 'Deutschland'],
+    [s.company_name, s.street, `${s.zip} ${s.city}`, s.country || 'Deutschland'].filter(Boolean),
     [s.phone ? `Tel. ${s.phone}` : null, s.email ? `E-Mail ${s.email}` : null, s.website ? `Web ${s.website}` : null].filter(Boolean),
     [s.vat_id ? `USt-ID ${s.vat_id}` : null, s.tax_number ? `Steuer-Nr. ${s.tax_number}` : null, s.owner_name ? `Geschäftsführung ${s.owner_name}` : null].filter(Boolean),
     [s.bank_name ? `Bank ${s.bank_name}` : null, s.iban ? `IBAN ${s.iban}` : null, s.bic ? `BIC ${s.bic}` : null].filter(Boolean),
@@ -594,7 +604,7 @@ async function buildInvoiceDoc(data: any): Promise<jsPDF> {
   footerCols.forEach((lines: any[], ci: number) => {
     lines.forEach((line: string, li: number) => {
       doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(...GRAY)
-      doc.text(line, 14 + ci * colW, footerY + li * 4.5)
+      txt(doc, line, 14 + ci * colW, footerY + li * 4.5)
     })
   })
 
