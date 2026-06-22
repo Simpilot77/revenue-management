@@ -49,12 +49,19 @@ function findDuplicates(bookings: any[]) {
   return dupeIds
 }
 
+const VISIBLE_DAYS = 90
+
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function CalendarPage() {
   const router = useRouter()
   const now = new Date()
-  const [year, setYear]   = useState(now.getFullYear())
-  const [month, setMonth] = useState(now.getMonth())
+  const todayStr = now.toISOString().slice(0, 10)
+
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date()
+    d.setDate(d.getDate() - 7)
+    return d.toISOString().slice(0, 10)
+  })
   const [houses, setHouses]     = useState<any[]>([])
   const [bookings, setBookings] = useState<any[]>([])
   const [loading, setLoading]   = useState(true)
@@ -79,19 +86,25 @@ export default function CalendarPage() {
   const [extraTaskAssignee, setExtraTaskAssignee] = useState('')
   const [extraTaskDone, setExtraTaskDone]   = useState(false)
 
-  const daysInMonth = getDaysInMonth(year, month)
-  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1)
-  const isToday = (d: number) => year === now.getFullYear() && month === now.getMonth() && d === now.getDate()
+  // build continuous days array
+  const days: string[] = []
+  const _d = new Date(startDate)
+  for (let i = 0; i < VISIBLE_DAYS; i++) {
+    days.push(_d.toISOString().slice(0, 10))
+    _d.setDate(_d.getDate() + 1)
+  }
+  const endDate = days[days.length - 1]
+  const isToday = (ds: string) => ds === todayStr
 
-  const prevMonth = () => { if (month===0){setYear(y=>y-1);setMonth(11)} else setMonth(m=>m-1) }
-  const nextMonth = () => { if (month===11){setYear(y=>y+1);setMonth(0)} else setMonth(m=>m+1) }
-  const goToday   = () => { setYear(now.getFullYear()); setMonth(now.getMonth()) }
+  const goBack    = () => { const d = new Date(startDate); d.setDate(d.getDate()-30); setStartDate(d.toISOString().slice(0,10)) }
+  const goForward = () => { const d = new Date(startDate); d.setDate(d.getDate()+30); setStartDate(d.toISOString().slice(0,10)) }
+  const goToday   = () => { const d = new Date(); d.setDate(d.getDate()-7); setStartDate(d.toISOString().slice(0,10)) }
 
-  // load all data for current month
+  // load all data for visible range
   useEffect(() => {
     setLoading(true)
-    const from = dateStr(year, month, 1)
-    const to   = dateStr(year, month, daysInMonth)
+    const from = startDate
+    const to   = endDate
 
     Promise.all([
       fetch('/api/houses').then(r => r.json()),
@@ -130,7 +143,7 @@ export default function CalendarPage() {
       }
       setLoading(false)
     })
-  }, [year, month])
+  }, [startDate])
 
   // Build lookup: house_id + marker_date → marker row (for manual markers without booking)
   const markersByKey = useCallback(() => {
@@ -261,17 +274,17 @@ export default function CalendarPage() {
   }
 
   const buildSegments = (houseId: number) => {
-    const monthStart = dateStr(year, month, 1)
-    const monthEnd   = dateStr(year, month, daysInMonth)
     return bookings
       .filter(b => b.house_id === houseId && VISIBLE_STATUSES.includes(b.status))
-      .filter(b => b.checkin_date?.slice(0,10) <= monthEnd && b.checkout_date?.slice(0,10) > monthStart)
+      .filter(b => b.checkin_date?.slice(0,10) <= endDate && b.checkout_date?.slice(0,10) > startDate)
       .map(b => {
-        const ciDay = b.checkin_date?.slice(0,10) >= monthStart ? parseInt(b.checkin_date.slice(8,10)) : 1
-        const coDay = b.checkout_date?.slice(0,10) <= monthEnd  ? parseInt(b.checkout_date.slice(8,10)) : daysInMonth + 1
-        const clippedLeft  = b.checkin_date?.slice(0,10) < monthStart
-        const clippedRight = b.checkout_date?.slice(0,10) > monthEnd
-        return { booking:b, ciDay, coDay, clippedLeft, clippedRight, spanDays: coDay-ciDay }
+        const ciDs = b.checkin_date?.slice(0,10) >= startDate ? b.checkin_date.slice(0,10) : startDate
+        const coDs = b.checkout_date?.slice(0,10) <= endDate  ? b.checkout_date.slice(0,10) : endDate
+        const ciIdx = days.indexOf(ciDs)
+        const coIdx = days.indexOf(coDs)
+        const clippedLeft  = b.checkin_date?.slice(0,10) < startDate
+        const clippedRight = b.checkout_date?.slice(0,10) > endDate
+        return { booking:b, ciIdx, coIdx: coIdx < 0 ? VISIBLE_DAYS : coIdx, clippedLeft, clippedRight, spanDays: coIdx - ciIdx }
       })
   }
 
@@ -288,9 +301,11 @@ export default function CalendarPage() {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={goToday} className="text-sm border border-gray-200 rounded-lg px-4 py-1.5 hover:bg-gray-50">Heute</button>
-          <button onClick={prevMonth} className="border border-gray-200 rounded-lg py-1.5 px-3 text-base hover:bg-gray-50">‹</button>
-          <span className="font-semibold text-gray-800 w-44 text-center text-sm">{MONTH_NAMES[month]} {year}</span>
-          <button onClick={nextMonth} className="border border-gray-200 rounded-lg py-1.5 px-3 text-base hover:bg-gray-50">›</button>
+          <button onClick={goBack} className="border border-gray-200 rounded-lg py-1.5 px-3 text-base hover:bg-gray-50">‹</button>
+          <span className="font-semibold text-gray-800 w-52 text-center text-sm">
+            {new Date(startDate).toLocaleDateString('de-DE',{day:'2-digit',month:'short',year:'numeric'})} – {new Date(endDate).toLocaleDateString('de-DE',{day:'2-digit',month:'short',year:'numeric'})}
+          </span>
+          <button onClick={goForward} className="border border-gray-200 rounded-lg py-1.5 px-3 text-base hover:bg-gray-50">›</button>
         </div>
       </div>
 
@@ -305,21 +320,29 @@ export default function CalendarPage() {
         <div className="flex-1 overflow-auto px-6 py-4">
           <div className="rounded-xl border border-gray-200 overflow-hidden shadow-sm bg-white">
             <div style={{ overflowX:'auto' }}>
-              <div style={{ minWidth:`${HOUSE_COL_W + DAY_COL_W*daysInMonth}px` }}>
+              <div style={{ minWidth:`${HOUSE_COL_W + DAY_COL_W*VISIBLE_DAYS}px` }}>
 
                 {/* Header row */}
-                <div className="flex border-b border-gray-200 bg-gray-50 sticky top-0 z-20" style={{ height:52 }}>
+                <div className="flex border-b border-gray-200 bg-gray-50 sticky top-0 z-20" style={{ height:60 }}>
                   <div className="shrink-0 flex items-end px-4 pb-2 border-r border-gray-200 bg-gray-50 sticky left-0 z-30" style={{ width:HOUSE_COL_W, minWidth:HOUSE_COL_W }}>
                     <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Haus</span>
                   </div>
-                  {days.map(d => {
-                    const dow = new Date(year, month, d).getDay()
+                  {days.map(ds => {
+                    const d = new Date(ds)
+                    const day = d.getDate()
+                    const dow = d.getDay()
                     const isWe = dow===0||dow===6
-                    const today = isToday(d)
+                    const today = isToday(ds)
+                    const isFirst = day === 1
                     return (
-                      <div key={d} style={{ width:DAY_COL_W, minWidth:DAY_COL_W, ...(today?{backgroundColor:'#a855f7',boxShadow:'0 0 14px 2px rgba(168,85,247,0.6)'}:{}) }}
+                      <div key={ds} style={{ width:DAY_COL_W, minWidth:DAY_COL_W, ...(today?{backgroundColor:'#a855f7',boxShadow:'0 0 14px 2px rgba(168,85,247,0.6)'}:{}) }}
                         className={`shrink-0 flex flex-col items-center justify-end pb-1.5 relative ${today?'':isWe?'bg-gray-100/60':''}`}>
-                        <span className={`relative z-1 text-xs font-bold leading-none ${today?'text-white':isWe?'text-gray-400':'text-gray-500'}`}>{d}</span>
+                        {isFirst && (
+                          <span className="absolute top-1 left-0 right-0 text-center font-bold leading-none text-blue-600" style={{ fontSize:'0.6rem' }}>
+                            {MONTH_NAMES_SHORT[d.getMonth()]}
+                          </span>
+                        )}
+                        <span className={`relative z-1 text-xs font-bold leading-none ${today?'text-white':isWe?'text-gray-400':'text-gray-500'}`}>{day}</span>
                         <span className={`relative z-1 mt-0.5 leading-none ${today?'text-violet-100':'text-gray-300'}`} style={{ fontSize:'0.6rem' }}>{DAY_NAMES_SHORT[dow]}</span>
                         {today && <div className="absolute bottom-0 left-0 right-0 h-1 bg-violet-700" />}
                       </div>
@@ -337,15 +360,14 @@ export default function CalendarPage() {
                         {house.capacity && <span className="text-xs text-gray-400 mt-0.5">{house.capacity} Betten</span>}
                       </div>
                       <div className="relative flex flex-1" style={{ height:ROW_H }}>
-                        {days.map(d => {
-                          const ds = dateStr(year, month, d)
-                          const dow = new Date(year, month, d).getDay()
+                        {days.map(ds => {
+                          const dow = new Date(ds).getDay()
                           const isWe = dow===0||dow===6
-                          const today = isToday(d)
+                          const today = isToday(ds)
                           const cs = getCleaningStatus(house.id, ds)
                           const excludedBooking = !cs ? getExcludedBookingForDate(house.id, ds) : null
                           return (
-                            <div key={d} style={{ width:DAY_COL_W, minWidth:DAY_COL_W, position:'relative', flexShrink:0, ...(today?{backgroundColor:'rgba(168,85,247,0.16)',boxShadow:'inset 0 0 0 1px rgba(168,85,247,0.5)'}:{}) }}
+                            <div key={ds} style={{ width:DAY_COL_W, minWidth:DAY_COL_W, position:'relative', flexShrink:0, ...(today?{backgroundColor:'rgba(168,85,247,0.16)',boxShadow:'inset 0 0 0 1px rgba(168,85,247,0.5)'}:{}) }}
                               className={`border-r border-gray-100 cursor-pointer ${today?'':isWe?'bg-gray-100/30':''}`}
                               onClick={() => openCleaningModal({ houseId:house.id, houseName:house.name, date:ds, alreadySet:cs!==null, status:cs?.status, bookingId:cs?.bookingId??null, excludedBooking })}>
                               {today && <div className="absolute top-0 bottom-0 left-0 w-1 bg-violet-500" />}
@@ -360,11 +382,11 @@ export default function CalendarPage() {
                         })}
 
                         {/* Booking bars */}
-                        {segments.map(({ booking:b, ciDay, coDay, clippedLeft, clippedRight }) => {
+                        {segments.map(({ booking:b, ciIdx, coIdx, clippedLeft, clippedRight }) => {
                           const meta = STATUS_META[b.status] || STATUS_META.bestaetigt
                           const isDupe = dupeIds.has(b.id)
-                          const barLeft   = (ciDay-1)*DAY_COL_W + (clippedLeft ?0:DAY_COL_W*0.25)
-                          const barRight  = (coDay-1)*DAY_COL_W - (clippedRight?0:DAY_COL_W*0.25)
+                          const barLeft   = ciIdx*DAY_COL_W + (clippedLeft ?0:DAY_COL_W*0.25)
+                          const barRight  = coIdx*DAY_COL_W - (clippedRight?0:DAY_COL_W*0.25)
                           const barWidth  = Math.max(8, barRight-barLeft)
                           const barTop    = ROW_H*0.16
                           const barHeight = ROW_H*0.68
@@ -415,14 +437,13 @@ export default function CalendarPage() {
                     <span className="text-xs text-gray-400 mt-0.5">z. B. Müllabfuhr</span>
                   </div>
                   <div className="relative flex flex-1" style={{ height:ROW_H }}>
-                    {days.map(d => {
-                      const ds = dateStr(year, month, d)
-                      const dow = new Date(year, month, d).getDay()
+                    {days.map(ds => {
+                      const dow = new Date(ds).getDay()
                       const isWe = dow===0||dow===6
-                      const today = isToday(d)
+                      const today = isToday(ds)
                       const task = extraTasks[ds]
                       return (
-                        <div key={d} style={{ width:DAY_COL_W, minWidth:DAY_COL_W, position:'relative', flexShrink:0, ...(today?{backgroundColor:'rgba(168,85,247,0.16)',boxShadow:'inset 0 0 0 1px rgba(168,85,247,0.5)'}:{}) }}
+                        <div key={ds} style={{ width:DAY_COL_W, minWidth:DAY_COL_W, position:'relative', flexShrink:0, ...(today?{backgroundColor:'rgba(168,85,247,0.16)',boxShadow:'inset 0 0 0 1px rgba(168,85,247,0.5)'}:{}) }}
                           className={`border-r border-gray-100 cursor-pointer flex flex-col items-center justify-center gap-0.5 ${today?'':isWe?'bg-gray-100/30':''}`}
                           onClick={() => openExtraTaskModal(ds)}>
                           {today && <div className="absolute top-0 bottom-0 left-0 w-1 bg-violet-500" />}
