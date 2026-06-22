@@ -8,7 +8,7 @@ export async function GET() {
     .from('bookings')
     .select('id,guest_name,company_name,guest_email,guest_phone,nationality,house_name,channel_name,checkin_date,checkout_date,nights,total_price,status,invoice_number,is_owner_block')
     .not('guest_name', 'is', null)
-    .neq('is_owner_block', true)
+    .or('is_owner_block.is.null,is_owner_block.eq.false')
     .order('checkin_date', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

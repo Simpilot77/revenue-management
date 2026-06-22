@@ -146,6 +146,23 @@ export default function InvoicesPage() {
         </select>
       </div>
 
+      {/* Summary */}
+      {!loading && invoices.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {[
+            ['Rechnungen gesamt', invoices.filter(i=>i.type!=='storno').length],
+            ['Stornos', invoices.filter(i=>i.type==='storno').length],
+            ['Gesamtbetrag', fmtEur(invoices.filter(i=>i.type!=='storno').reduce((s,i)=>s+parseFloat(i.brutto_total||0),0))],
+            ['Dieses Jahr', invoices.filter(i=>i.type!=='storno'&&(i.invoice_date||'').startsWith(new Date().getFullYear().toString())).length],
+          ].map(([label, val]) => (
+            <div key={label as string} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3">
+              <div className="text-xs text-gray-400">{label}</div>
+              <div className="text-xl font-bold text-gray-900 mt-0.5">{val}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {loading ? <div className="text-center py-12 text-gray-400">Laden…</div> : (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
@@ -206,7 +223,18 @@ export default function InvoicesPage() {
                   )
                 })}
                 {filtered.length===0 && (
-                  <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">Keine Rechnungen.</td></tr>
+                  <tr><td colSpan={8} className="px-8 py-14 text-center">
+                    <div className="text-gray-400 text-sm">
+                      {invoices.length === 0
+                        ? <>
+                            <div className="text-3xl mb-3">🧾</div>
+                            <div className="font-medium text-gray-500 mb-1">Noch keine Rechnungen</div>
+                            <div className="text-gray-400">Rechnungen erscheinen hier, sobald sie in einer Buchung erstellt wurden.</div>
+                          </>
+                        : 'Keine Treffer für diese Suche.'
+                      }
+                    </div>
+                  </td></tr>
                 )}
               </tbody>
             </table>

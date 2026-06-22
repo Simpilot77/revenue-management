@@ -47,6 +47,14 @@
       "namedRegex": "^/api/users/(?<nxtPid>[^/]+?)(?:/)?$"
     },
     {
+      "page": "/api/users/[id]/permissions",
+      "regex": "^/api/users/([^/]+?)/permissions(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/users/(?<nxtPid>[^/]+?)/permissions(?:/)?$"
+    },
+    {
       "page": "/bookings/[id]",
       "regex": "^/bookings/([^/]+?)(?:/)?$",
       "routeKeys": {
@@ -181,6 +189,12 @@
       "regex": "^/api/users/invite(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/users/invite(?:/)?$"
+    },
+    {
+      "page": "/api/users/me/permissions",
+      "regex": "^/api/users/me/permissions(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/users/me/permissions(?:/)?$"
     },
     {
       "page": "/bookings",
