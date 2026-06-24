@@ -11,6 +11,7 @@ const TABLES = [
   'calendar_extra_tasks',
   'deleted_bookings',
   'invoices',
+  'dsgvo_audit_log',
 ]
 
 export async function GET() {

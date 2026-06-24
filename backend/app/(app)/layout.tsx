@@ -18,6 +18,7 @@ const NAV = [
   { href: '/customers',  label: 'Kunden',         icon: '👥',  key: 'customers' },
   { href: '/users',      label: 'Benutzer',       icon: '👤',  key: 'users' },
   { href: '/daten',      label: 'Datensicherung', icon: '🗄️', key: 'daten' },
+  { href: '/dsgvo',      label: 'Datenschutz',    icon: '🔒', key: 'dsgvo' },
   { href: '/settings',   label: 'Einstellungen',  icon: '⚙️', key: 'settings' },
 ]
 
