@@ -1,5 +1,5 @@
 {
-  "synced_at": "2026-06-26T02:48:10.086655Z",
+  "synced_at": "2026-06-26T08:55:48.118506Z",
   "bookings": [
     {
       "id": 18588939,
@@ -2905,7 +2905,7 @@
         "symbol": "€  "
       },
       "payment_method": "ueberweisung",
-      "payment_status": "offen",
+      "payment_status": "bezahlt",
       "invoice_number": null,
       "status": "bestaetigt",
       "is_owner_block": false,
