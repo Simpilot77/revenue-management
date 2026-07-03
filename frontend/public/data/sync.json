@@ -1,5 +1,5 @@
 {
-  "synced_at": "2026-07-03T08:54:24.558957Z",
+  "synced_at": "2026-07-03T19:10:29.817490Z",
   "bookings": [
     {
       "id": 18588939,
@@ -2936,8 +2936,8 @@
       "external_reference": "21103496",
       "booking_date": "2026-06-12",
       "checkin_date": "2026-06-22",
-      "checkout_date": "2026-07-12",
-      "nights": 20,
+      "checkout_date": "2026-07-19",
+      "nights": 27,
       "guest_name": {
         "first_name": "Vanessa ",
         "last_name": "Szendera",
@@ -2951,10 +2951,10 @@
       "guest_count": 5,
       "adults": 5,
       "children": 0,
-      "daily_rate": 160.02,
+      "daily_rate": 160.01,
       "cleaning_fee": 0,
       "discount_percent": 0,
-      "total_price": 3200.35,
+      "total_price": 4320.35,
       "currency": {
         "id": 92,
         "code": "EUR",
@@ -2963,7 +2963,7 @@
         "symbol": "€  "
       },
       "payment_method": "ueberweisung",
-      "payment_status": "bezahlt",
+      "payment_status": "offen",
       "invoice_number": null,
       "status": "bestaetigt",
       "is_owner_block": false,
@@ -3310,58 +3310,6 @@
       "deposit_returned": false,
       "created_by": 1,
       "included_in_stats": true
-    },
-    {
-      "id": 5182698,
-      "house_id": 3,
-      "house_name": "Privates Teamhaus - viel Platz und Komfort, Rechnung B2B",
-      "house_short": "C",
-      "house_capacity": 6,
-      "channel_id": 1,
-      "channel_name": "Direkt",
-      "channel_short": "DIREKT",
-      "channel_color": "#10b981",
-      "external_reference": "5182698",
-      "booking_date": "2026-06-26",
-      "checkin_date": "2026-07-12",
-      "checkout_date": "2026-07-20",
-      "nights": 8,
-      "guest_name": {
-        "first_name": null,
-        "last_name": null,
-        "full_name": ""
-      },
-      "company_name": null,
-      "guest_email": null,
-      "guest_phone": null,
-      "nationality": null,
-      "is_returning_guest": false,
-      "guest_count": 1,
-      "adults": 1,
-      "children": 0,
-      "daily_rate": 0,
-      "cleaning_fee": 0,
-      "discount_percent": 0,
-      "total_price": 0.0,
-      "currency": "EUR",
-      "payment_method": "ueberweisung",
-      "payment_status": "offen",
-      "invoice_number": null,
-      "status": "bestaetigt",
-      "is_owner_block": false,
-      "block_reason": null,
-      "cancellation_date": null,
-      "cancellation_reason": null,
-      "breakfast_included": false,
-      "pets_allowed": false,
-      "parking": true,
-      "guest_notes": null,
-      "internal_notes": null,
-      "guests_registered": false,
-      "deposit_taken": false,
-      "deposit_returned": false,
-      "created_by": 1,
-      "included_in_stats": true
     }
   ],
   "properties": [
@@ -3385,8 +3333,8 @@
     }
   ],
   "stats": {
-    "total": 59,
-    "reservations": 59,
+    "total": 58,
+    "reservations": 58,
     "owner_blocks": 0
   }
 }
