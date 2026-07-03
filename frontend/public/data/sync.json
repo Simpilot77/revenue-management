@@ -1,5 +1,5 @@
 {
-  "synced_at": "2026-07-02T19:16:07.243809Z",
+  "synced_at": "2026-07-03T08:54:24.558957Z",
   "bookings": [
     {
       "id": 18588939,
@@ -3324,8 +3324,8 @@
       "external_reference": "5182698",
       "booking_date": "2026-06-26",
       "checkin_date": "2026-07-12",
-      "checkout_date": "2026-07-17",
-      "nights": 5,
+      "checkout_date": "2026-07-20",
+      "nights": 8,
       "guest_name": {
         "first_name": null,
         "last_name": null,
