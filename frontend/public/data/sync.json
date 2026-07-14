@@ -1,5 +1,5 @@
 {
-  "synced_at": "2026-07-14T13:20:22.596118Z",
+  "synced_at": "2026-07-14T19:10:06.838226Z",
   "bookings": [
     {
       "id": 18588939,
@@ -1913,10 +1913,10 @@
       "guest_count": 2,
       "adults": 2,
       "children": 0,
-      "daily_rate": 156.17,
+      "daily_rate": 0,
       "cleaning_fee": 0,
       "discount_percent": 0,
-      "total_price": 1405.53,
+      "total_price": 0.0,
       "currency": {
         "id": 92,
         "code": "EUR",
@@ -1927,7 +1927,7 @@
       "payment_method": "ueberweisung",
       "payment_status": "offen",
       "invoice_number": null,
-      "status": "bestaetigt",
+      "status": "storniert",
       "is_owner_block": false,
       "block_reason": null,
       "cancellation_date": null,
