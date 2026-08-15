@@ -1,5 +1,5 @@
 {
-  "synced_at": "2026-08-15T06:26:30.624409Z",
+  "synced_at": "2026-08-15T12:24:58.419964Z",
   "bookings": [
     {
       "id": 18588939,
@@ -3599,9 +3599,9 @@
       "checkout_date": "2026-08-22",
       "nights": 7,
       "guest_name": {
-        "first_name": "Lübbert",
-        "last_name": "Ricarda",
-        "full_name": "Lübbert Ricarda"
+        "first_name": "Ricarda",
+        "last_name": "Lübbert",
+        "full_name": "Ricarda Lübbert"
       },
       "company_name": null,
       "guest_email": "ricardaluebbert@gmx.de",
