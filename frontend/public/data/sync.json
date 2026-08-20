@@ -1,5 +1,5 @@
 {
-  "synced_at": "2026-08-20T06:35:08.045407Z",
+  "synced_at": "2026-08-20T12:34:52.631742Z",
   "bookings": [
     {
       "id": 18588939,
@@ -3658,12 +3658,12 @@
       "nights": 6,
       "guest_name": {
         "first_name": "Jing",
-        "last_name": "",
-        "full_name": "Jing"
+        "last_name": "Ning",
+        "full_name": "Jing Ning"
       },
       "company_name": null,
       "guest_email": null,
-      "guest_phone": "",
+      "guest_phone": "8613764666683",
       "nationality": null,
       "is_returning_guest": false,
       "guest_count": 4,
