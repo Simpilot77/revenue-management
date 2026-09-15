@@ -1,5 +1,5 @@
 {
-  "synced_at": "2026-09-15T10:51:21.791211Z",
+  "synced_at": "2026-09-15T16:03:05.043074Z",
   "bookings": [
     {
       "id": 18588939,
@@ -4527,12 +4527,12 @@
       "checkout_date": "2026-09-24",
       "nights": 4,
       "guest_name": {
-        "first_name": "Martina",
-        "last_name": "Mitte",
-        "full_name": "Martina Mitte"
+        "first_name": "Friedrich",
+        "last_name": "Krüger",
+        "full_name": "Friedrich Krüger"
       },
       "company_name": null,
-      "guest_email": "martina.mitte@deutschebahn.com",
+      "guest_email": "friedrich.krueger@deutschebahn.com",
       "guest_phone": "",
       "nationality": null,
       "is_returning_guest": false,
