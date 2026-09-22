@@ -1,5 +1,5 @@
 {
-  "synced_at": "2026-09-22T10:47:09.509398Z",
+  "synced_at": "2026-09-22T16:06:17.093214Z",
   "bookings": [
     {
       "id": 18588939,
@@ -3330,8 +3330,8 @@
       "external_reference": "22454233",
       "booking_date": "2026-08-13",
       "checkin_date": "2026-09-15",
-      "checkout_date": "2026-10-09",
-      "nights": 24,
+      "checkout_date": "2026-10-02",
+      "nights": 17,
       "guest_name": {
         "first_name": "Firma",
         "last_name": "Hamm Energietechnik Anlagen GmbH",
