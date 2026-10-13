@@ -1,5 +1,5 @@
 {
-  "synced_at": "2026-10-12T14:09:27.694193Z",
+  "synced_at": "2026-10-13T00:02:14.157983Z",
   "bookings": [
     {
       "id": 18588939,
@@ -4782,6 +4782,64 @@
       "deposit_returned": false,
       "created_by": 1,
       "included_in_stats": true
+    },
+    {
+      "id": 23717809,
+      "house_id": 2,
+      "house_name": "Privates Teamhaus/7Personen/5SZ/Parkplatz/Rechnung",
+      "house_short": "B",
+      "house_capacity": 6,
+      "channel_id": 3,
+      "channel_name": "Airbnb",
+      "channel_short": "AIRBNB",
+      "channel_color": "#ff5a5f",
+      "external_reference": "23717809",
+      "booking_date": "2026-10-12",
+      "checkin_date": "2026-12-29",
+      "checkout_date": "2027-01-02",
+      "nights": 4,
+      "guest_name": {
+        "first_name": "Carolin",
+        "last_name": "Merkwitz",
+        "full_name": "Carolin Merkwitz"
+      },
+      "company_name": null,
+      "guest_email": null,
+      "guest_phone": "4917645930704",
+      "nationality": null,
+      "is_returning_guest": false,
+      "guest_count": 7,
+      "adults": 7,
+      "children": 0,
+      "daily_rate": 426.5,
+      "cleaning_fee": 0,
+      "discount_percent": 0,
+      "total_price": 1706.0,
+      "currency": {
+        "id": 92,
+        "code": "EUR",
+        "name": "Euro",
+        "euro_forex": 1.0,
+        "symbol": "€  "
+      },
+      "payment_method": "ueberweisung",
+      "payment_status": "offen",
+      "invoice_number": null,
+      "status": "bestaetigt",
+      "is_owner_block": false,
+      "block_reason": null,
+      "cancellation_date": null,
+      "cancellation_reason": null,
+      "breakfast_included": false,
+      "pets_allowed": false,
+      "parking": true,
+      "guest_notes": null,
+      "internal_notes": null,
+      "guests_registered": false,
+      "deposit_taken": false,
+      "deposit_returned": false,
+      "created_by": 1,
+      "included_in_stats": true
     }
   ],
   "properties": [
@@ -4805,8 +4863,8 @@
     }
   ],
   "stats": {
-    "total": 84,
-    "reservations": 84,
+    "total": 85,
+    "reservations": 85,
     "owner_blocks": 0
   }
 }
