@@ -1,5 +1,5 @@
 {
-  "synced_at": "2026-10-27T11:25:35.073064Z",
+  "synced_at": "2026-10-27T17:14:27.438103Z",
   "bookings": [
     {
       "id": 18588939,
@@ -4900,20 +4900,20 @@
       "included_in_stats": true
     },
     {
-      "id": 5804512,
-      "house_id": 1,
-      "house_name": "Modernes B2B-Teamhaus / 4SZ / 6 Pers. / Parkplatz / Rechnung",
-      "house_short": "A",
+      "id": 5823594,
+      "house_id": 3,
+      "house_name": "Privates Teamhaus - viel Platz und Komfort, Rechnung B2B",
+      "house_short": "C",
       "house_capacity": 6,
       "channel_id": 1,
       "channel_name": "Direkt",
       "channel_short": "DIREKT",
       "channel_color": "#10b981",
-      "external_reference": "5804512",
-      "booking_date": "2026-10-23",
-      "checkin_date": "2026-10-31",
-      "checkout_date": "2026-12-01",
-      "nights": 31,
+      "external_reference": "5823594",
+      "booking_date": "2026-10-27",
+      "checkin_date": "2026-11-09",
+      "checkout_date": "2026-11-14",
+      "nights": 5,
       "guest_name": {
         "first_name": "",
         "last_name": "",
