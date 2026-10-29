@@ -1,5 +1,5 @@
 {
-  "synced_at": "2026-10-29T03:55:50.789848Z",
+  "synced_at": "2026-10-29T12:07:00.029773Z",
   "bookings": [
     {
       "id": 18588939,
@@ -4854,8 +4854,8 @@
       "external_reference": "23734039",
       "booking_date": "2026-10-13",
       "checkin_date": "2026-10-26",
-      "checkout_date": "2026-10-30",
-      "nights": 4,
+      "checkout_date": "2026-10-31",
+      "nights": 5,
       "guest_name": {
         "first_name": "王佳丽",
         "last_name": "王",
@@ -4869,10 +4869,10 @@
       "guest_count": 3,
       "adults": 3,
       "children": 0,
-      "daily_rate": 350.75,
+      "daily_rate": 332.6,
       "cleaning_fee": 0,
       "discount_percent": 0,
-      "total_price": 1403.0,
+      "total_price": 1663.0,
       "currency": {
         "id": 92,
         "code": "EUR",
