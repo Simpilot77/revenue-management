@@ -1,5 +1,5 @@
 {
-  "synced_at": "2026-11-04T13:38:32.699146Z",
+  "synced_at": "2026-11-04T23:05:08.292339Z",
   "bookings": [
     {
       "id": 18588939,
@@ -3735,9 +3735,9 @@
       "channel_color": "#10b981",
       "external_reference": "22773624",
       "booking_date": "2026-08-28",
-      "checkin_date": "2027-02-01",
+      "checkin_date": "2027-01-10",
       "checkout_date": "2027-07-16",
-      "nights": 165,
+      "nights": 187,
       "guest_name": {
         "first_name": "Mauela",
         "last_name": "Thiele",
@@ -3751,7 +3751,7 @@
       "guest_count": 6,
       "adults": 6,
       "children": 0,
-      "daily_rate": 182.97,
+      "daily_rate": 161.44,
       "cleaning_fee": 0,
       "discount_percent": 0,
       "total_price": 30190.05,
@@ -3793,9 +3793,9 @@
       "channel_color": "#10b981",
       "external_reference": "22773745",
       "booking_date": "2026-08-28",
-      "checkin_date": "2027-01-18",
+      "checkin_date": "2027-01-10",
       "checkout_date": "2027-07-16",
-      "nights": 179,
+      "nights": 187,
       "guest_name": {
         "first_name": "Manuela",
         "last_name": "Thiele",
@@ -3809,7 +3809,7 @@
       "guest_count": 7,
       "adults": 7,
       "children": 0,
-      "daily_rate": 182.76,
+      "daily_rate": 174.94,
       "cleaning_fee": 0,
       "discount_percent": 0,
       "total_price": 32713.32,
