@@ -1,5 +1,5 @@
 {
-  "synced_at": "2026-11-06T04:42:35.833157Z",
+  "synced_at": "2026-11-06T13:36:23.910917Z",
   "bookings": [
     {
       "id": 18588939,
@@ -5173,7 +5173,7 @@
       "payment_method": "ueberweisung",
       "payment_status": "offen",
       "invoice_number": null,
-      "status": "bestaetigt",
+      "status": "storniert",
       "is_owner_block": false,
       "block_reason": null,
       "cancellation_date": null,
